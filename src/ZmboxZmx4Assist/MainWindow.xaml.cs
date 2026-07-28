@@ -342,40 +342,40 @@ public partial class MainWindow : System.Windows.Window
         _captureInProgress = true;
         try
         {
-        var profile = SelectedProfile;
+            var profile = SelectedProfile;
 
-        var capture = new ForegroundWindowCaptureDialog(_targets) { Owner = this };
-        if (capture.ShowDialog() != true || capture.CapturedWindow is not { } selected)
-        {
-            SetStatus("未锁定回放窗口。请重新开始倒计时，并在结束前点击游戏窗口。");
-            return false;
-        }
+            var capture = new ForegroundWindowCaptureDialog(_targets) { Owner = this };
+            if (capture.ShowDialog() != true || capture.CapturedWindow is not { } selected)
+            {
+                SetStatus("未锁定回放窗口。请重新开始倒计时，并在结束前点击游戏窗口。");
+                return false;
+            }
 
-        var rememberedProfile = RememberCapturedWindow(profile, selected);
-        var matchesProfile = _targets.IsZmboxWindow(selected);
-        _manualWindow = new ManualWindowBinding(selected, matchesProfile);
-        SelectedWindowText.Text =
-            $"本次已锁定前台窗口\n标题：{selected.WindowTitle}\n进程：{selected.ProcessName} · PID {selected.ProcessId}\n" +
-            $"位置与尺寸：({selected.Layout.WindowX}, {selected.Layout.WindowY}) · {selected.Layout.WindowWidth} × {selected.Layout.WindowHeight}\n开始后仅绑定此窗口。";
-        if (!_targets.TryActivate(selected))
-        {
-            ClearManualWindow(false);
-            SetStatus("无法将锁定窗口置于前台；请重新开始倒计时。 ");
-            return false;
-        }
-        SetStatus("已锁定回放窗口，正在显示 1.5 秒物理像素边框…");
-        var highlight = await _highlighter.ShowAsync(selected);
-        if (!highlight.Succeeded)
-        {
-            ClearManualWindow(false);
-            SetStatus(highlight.Message);
-            return false;
-        }
-        SetStatus(matchesProfile
-            ? "已锁定造梦盒子前台窗口，并已自动更新目标信息。"
-            : "已锁定前台窗口；路径未读取时保留原路径，本次仅可前台回放。");
-        RefreshPreflight();
-        return true;
+            var rememberedProfile = RememberCapturedWindow(profile, selected);
+            var matchesProfile = _targets.IsZmboxWindow(selected);
+            _manualWindow = new ManualWindowBinding(selected, matchesProfile);
+            SelectedWindowText.Text =
+                $"本次已锁定前台窗口\n标题：{selected.WindowTitle}\n进程：{selected.ProcessName} · PID {selected.ProcessId}\n" +
+                $"位置与尺寸：({selected.Layout.WindowX}, {selected.Layout.WindowY}) · {selected.Layout.WindowWidth} × {selected.Layout.WindowHeight}\n开始后仅绑定此窗口。";
+            if (!_targets.TryActivate(selected))
+            {
+                ClearManualWindow(false);
+                SetStatus("无法将锁定窗口置于前台；请重新开始倒计时。 ");
+                return false;
+            }
+            SetStatus("已锁定回放窗口，正在显示 1.5 秒物理像素边框…");
+            var highlight = await _highlighter.ShowAsync(selected);
+            if (!highlight.Succeeded)
+            {
+                ClearManualWindow(false);
+                SetStatus(highlight.Message);
+                return false;
+            }
+            SetStatus(matchesProfile
+                ? "已锁定造梦盒子前台窗口，并已自动更新目标信息。"
+                : "已锁定前台窗口；路径未读取时保留原路径，本次仅可前台回放。");
+            RefreshPreflight();
+            return true;
         }
         finally
         {
@@ -573,7 +573,7 @@ public partial class MainWindow : System.Windows.Window
             ? $"窗口：{locked.Window.WindowTitle}\n进程：{locked.Window.ProcessName} · PID {locked.Window.ProcessId}\n路径：{(string.IsNullOrWhiteSpace(locked.Window.ExecutablePath) ? "未读取到" : locked.Window.ExecutablePath)}"
             : result.TargetFound ? $"窗口：{result.WindowTitle}" : $"路径：{profile.ExecutablePath}";
         LayoutText.Text = SelectedMacro?.DisplayLayout is null ? "布局：选择宏后检查录制布局。" : $"布局：{(result.LayoutMatches ? "与录制时一致" : "与录制时不一致")}";
-        ChannelText.Text = $"通道：前台 {(result.IsForeground ? "已就绪" : "需置前") } · 后台 {(result.BackgroundAllowed ? "可测试" : "已禁用")}";
+        ChannelText.Text = $"通道：前台 {(result.IsForeground ? "已就绪" : "需置前")} · 后台 {(result.BackgroundAllowed ? "可测试" : "已禁用")}";
     }
 
     private void RefreshControlState()

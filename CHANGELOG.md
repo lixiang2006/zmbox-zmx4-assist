@@ -1,5 +1,11 @@
 # Changelog
 
+## 1.0.2
+
+- Chinese is the default application language and UI culture.
+- Enforce formatting verification and warnings-as-errors in CI.
+- Ship the complete GPL-3.0-only license text with source and release packages.
+
 ## 1.0.0
 
 - First public source release of Zmbox ZMX4 Assist.

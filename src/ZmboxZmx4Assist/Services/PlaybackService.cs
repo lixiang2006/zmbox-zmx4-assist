@@ -310,9 +310,12 @@ public sealed class PlaybackService
 
     private static int MouseMessage(MouseButtonKind button, bool down) => (button, down) switch
     {
-        (MouseButtonKind.Left, true) => NativeMethods.WM_LBUTTONDOWN, (MouseButtonKind.Left, false) => NativeMethods.WM_LBUTTONUP,
-        (MouseButtonKind.Right, true) => NativeMethods.WM_RBUTTONDOWN, (MouseButtonKind.Right, false) => NativeMethods.WM_RBUTTONUP,
-        (MouseButtonKind.Middle, true) => NativeMethods.WM_MBUTTONDOWN, (MouseButtonKind.Middle, false) => NativeMethods.WM_MBUTTONUP,
+        (MouseButtonKind.Left, true) => NativeMethods.WM_LBUTTONDOWN,
+        (MouseButtonKind.Left, false) => NativeMethods.WM_LBUTTONUP,
+        (MouseButtonKind.Right, true) => NativeMethods.WM_RBUTTONDOWN,
+        (MouseButtonKind.Right, false) => NativeMethods.WM_RBUTTONUP,
+        (MouseButtonKind.Middle, true) => NativeMethods.WM_MBUTTONDOWN,
+        (MouseButtonKind.Middle, false) => NativeMethods.WM_MBUTTONUP,
         _ => down ? NativeMethods.WM_XBUTTONDOWN : NativeMethods.WM_XBUTTONUP
     };
 
