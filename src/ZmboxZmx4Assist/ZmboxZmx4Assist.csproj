@@ -10,6 +10,7 @@
     <ApplicationIcon></ApplicationIcon>
     <AssemblyName>ZmboxZmx4Assist</AssemblyName>
     <RootNamespace>ZmboxZmx4Assist</RootNamespace>
+    <NeutralLanguage>zh-CN</NeutralLanguage>
     <ApplicationManifest>app.manifest</ApplicationManifest>
     <Deterministic>true</Deterministic>
     <TreatWarningsAsErrors>true</TreatWarningsAsErrors>

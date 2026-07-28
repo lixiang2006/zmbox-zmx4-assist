@@ -1,4 +1,6 @@
 using ZmboxZmx4Assist.Services;
+using System.Globalization;
+using System.Threading;
 using System.Windows;
 
 namespace ZmboxZmx4Assist;
@@ -9,6 +11,12 @@ public partial class App : System.Windows.Application
 
     protected override void OnStartup(StartupEventArgs e)
     {
+        var chineseCulture = CultureInfo.GetCultureInfo("zh-CN");
+        CultureInfo.DefaultThreadCurrentCulture = chineseCulture;
+        CultureInfo.DefaultThreadCurrentUICulture = chineseCulture;
+        Thread.CurrentThread.CurrentCulture = chineseCulture;
+        Thread.CurrentThread.CurrentUICulture = chineseCulture;
+
         base.OnStartup(e);
         ShutdownMode = ShutdownMode.OnExplicitShutdown;
 

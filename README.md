@@ -1,6 +1,6 @@
 # Zmbox ZMX4 Assist
 
-[English](#english) | 中文
+中文（默认） | [English](#english)
 
 造梦盒子《造梦西游四》专用的本地键鼠录制与回放辅助工具，面向 Windows 10 22H2+ 与 Windows 11。
 
