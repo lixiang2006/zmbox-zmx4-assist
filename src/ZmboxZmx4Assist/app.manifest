@@ -1,0 +1,11 @@
+<?xml version="1.0" encoding="utf-8"?>
+<assembly manifestVersion="1.0" xmlns="urn:schemas-microsoft-com:asm.v1">
+  <assemblyIdentity version="1.0.0.0" name="ZmboxZmx4Assist.app" />
+  <compatibility xmlns="urn:schemas-microsoft-com:compatibility.v1"><application>
+    <supportedOS Id="{8e0f7a12-bfb3-4fe8-b9a5-48fd50a15a9a}" />
+    <supportedOS Id="{4f476546-937e-4f7f-bb1b-3bf8b4af4a1e}" />
+  </application></compatibility>
+  <application xmlns="urn:schemas-microsoft-com:asm.v3"><windowsSettings>
+    <dpiAwareness xmlns="http://schemas.microsoft.com/SMI/2016/WindowsSettings">PerMonitorV2</dpiAwareness>
+  </windowsSettings></application>
+</assembly>
