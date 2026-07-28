@@ -1,5 +1,9 @@
 # Changelog
 
+## 1.0.3
+
+- Correct the GPL-3.0-only license file so GitHub can recognize it.
+
 ## 1.0.2
 
 - Chinese is the default application language and UI culture.
