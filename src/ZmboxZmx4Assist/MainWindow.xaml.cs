@@ -157,7 +157,7 @@ public partial class MainWindow : System.Windows.Window
         var profile = SelectedProfile;
         if (!_recorder.Start(profile, _hotkeySettings)) { ShowRecordingResult("录制只能在目标窗口位于前台时启动。", false); return; }
         _recordingIndicator.ShowRecording(_hotkeySettings.RecordHotkey.DisplayText);
-        _notify?.Invoke("Zmbox ZMX4 Assist", $"已开始录制；按 {_hotkeySettings.RecordHotkey.DisplayText} 结束并保存。");
+        _notify?.Invoke("造梦盒子·造梦西游四辅助工具", $"已开始录制；按 {_hotkeySettings.RecordHotkey.DisplayText} 结束并保存。");
         SetStatus("正在录制；切换离开目标窗口会自动丢弃本次录制。");
         RefreshControlState();
     }
@@ -516,7 +516,7 @@ public partial class MainWindow : System.Windows.Window
     private void ShowRecordingResult(string message, bool success = true)
     {
         _recordingIndicator.ShowResult(message, success);
-        _notify?.Invoke("Zmbox ZMX4 Assist", message);
+        _notify?.Invoke("造梦盒子·造梦西游四辅助工具", message);
         SetStatus(message);
     }
 
@@ -526,7 +526,7 @@ public partial class MainWindow : System.Windows.Window
         if (!result.IsUnexpected) return;
         var message = $"回放已停止：{result.Reason}";
         _recordingIndicator.ShowResult(message, false, TimeSpan.FromSeconds(5));
-        _errorNotify?.Invoke("Zmbox ZMX4 Assist 回放停止", result.Reason);
+        _errorNotify?.Invoke("造梦盒子·造梦西游四辅助工具：回放停止", result.Reason);
         SetStatus(message);
     }
 

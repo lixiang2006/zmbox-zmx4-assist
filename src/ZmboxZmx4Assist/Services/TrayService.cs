@@ -9,7 +9,7 @@ public sealed class TrayService : IDisposable
         var menu = new System.Windows.Forms.ContextMenuStrip();
         menu.Items.Add("显示面板", null, (_, _) => { window.Show(); window.WindowState = System.Windows.WindowState.Normal; window.Activate(); });
         menu.Items.Add("退出", null, (_, _) => { _exitRequested = true; shutdown(); });
-        _icon = new System.Windows.Forms.NotifyIcon { Icon = System.Drawing.SystemIcons.Application, Text = "Zmbox ZMX4 Assist", ContextMenuStrip = menu, Visible = true };
+        _icon = new System.Windows.Forms.NotifyIcon { Icon = System.Drawing.SystemIcons.Application, Text = "造梦盒子·造梦西游四辅助工具", ContextMenuStrip = menu, Visible = true };
         _icon.DoubleClick += (_, _) => { window.Show(); window.Activate(); };
         window.Closing += (_, e) => { if (!_exitRequested) { e.Cancel = true; window.Hide(); } };
     }

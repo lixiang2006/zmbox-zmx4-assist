@@ -1,4 +1,4 @@
-# Zmbox ZMX4 Assist
+# 造梦盒子·造梦西游四辅助工具
 
 中文（默认） | [English](#english)
 
@@ -38,4 +38,4 @@ dotnet publish .\src\ZmboxZmx4Assist\ZmboxZmx4Assist.csproj -c Release -r win-x6
 
 ## English
 
-**Zmbox ZMX4 Assist** is a local keyboard/mouse recorder and playback helper for *Fantasy Journey to the West IV* running inside Zmbox. It accepts only a visible Zmbox process and window title, keeps data locally, and never uses drivers, injection, anti-detection, or bypass techniques. Use it only in a way that complies with the applicable game and platform rules. Experimental background window messages are unsupported unless you verify them yourself.
+**造梦盒子·造梦西游四辅助工具** (`Zmbox ZMX4 Assist`) is a local keyboard/mouse recorder and playback helper for *Fantasy Journey to the West IV* running inside Zmbox. It accepts only a visible Zmbox process and window title, keeps data locally, and never uses drivers, injection, anti-detection, or bypass techniques. Use it only in a way that complies with the applicable game and platform rules. Experimental background window messages are unsupported unless you verify them yourself.
