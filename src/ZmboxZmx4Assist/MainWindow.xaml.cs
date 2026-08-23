@@ -19,6 +19,8 @@ public partial class MainWindow : System.Windows.Window
     private readonly WindowHighlightService _highlighter;
     private readonly GlobalInputRecorder _recorder;
     private readonly PlaybackService _player;
+    private readonly ZmboxProcessLifecycle _processLifecycle;
+    private readonly RestartSessionService _restartSession;
     private readonly GlobalHotkeyService _hotkeys;
     private readonly RecordingIndicatorWindow _recordingIndicator = new();
     private readonly ObservableCollection<MacroListItem> _macros = [];
@@ -34,6 +36,7 @@ public partial class MainWindow : System.Windows.Window
     private Action<string, string>? _errorNotify;
     private ManualWindowBinding? _manualWindow;
     private bool _captureInProgress;
+    private bool _syncingRestartSessionSettings;
 
     public MainWindow()
     {
@@ -41,17 +44,31 @@ public partial class MainWindow : System.Windows.Window
         _highlighter = new WindowHighlightService(_targets);
         _recorder = new GlobalInputRecorder(_targets);
         _player = new PlaybackService(_targets);
+        _processLifecycle = new ZmboxProcessLifecycle(_targets);
+        _restartSession = new RestartSessionService(_player, _processLifecycle);
         _hotkeys = new GlobalHotkeyService(this);
         _recorder.RecordingStopped += OnRecordingStopped;
         _player.StatusChanged += SetStatus;
         _player.PlaybackStopped += OnPlaybackStopped;
         _player.StateChanged += RefreshControlState;
+        _restartSession.StatusChanged += SetStatus;
+        _restartSession.PlaybackStopped += OnPlaybackStopped;
+        _restartSession.StateChanged += RefreshControlState;
+        _restartSession.WindowBindingChanged += OnRestartSessionWindowBindingChanged;
         _hotkeys.RecordPressed += () => { if (!IsCapturingHotkey) RecordButton_Click(this, new RoutedEventArgs()); };
         _hotkeys.PlayPressed += async () => { if (!IsCapturingHotkey) await PlayAsync(); };
         _hotkeys.EmergencyPressed += () => { if (!IsCapturingHotkey) StopPlayback(); };
         SpeedSlider.ValueChanged += (_, _) => SpeedText.Text = $"{SpeedSlider.Value:F2}x";
         Loaded += (_, _) => LoadLibrary();
-        Closed += (_, _) => { _highlighter.Dispose(); _recordingIndicator.Close(); _hotkeys.Dispose(); _recorder.Dispose(); _player.EmergencyStop(); };
+        Closed += (_, _) =>
+        {
+            _highlighter.Dispose();
+            _restartSession.EmergencyStop();
+            _player.EmergencyStop();
+            _recordingIndicator.Close();
+            _hotkeys.Dispose();
+            _recorder.Dispose();
+        };
     }
 
     public void SetNotifier(Action<string, string> notifier, Action<string, string> errorNotifier)
@@ -74,8 +91,10 @@ public partial class MainWindow : System.Windows.Window
         var hotkeyResult = _hotkeys.Configure(_hotkeySettings);
         ProfilesCombo.ItemsSource = _profiles;
         MacrosList.ItemsSource = _macros;
+        RestartPreparationMacroCombo.ItemsSource = _macros;
         ProfilesCombo.SelectedIndex = _profiles.Count > 0 ? 0 : -1;
         if (_macros.Count > 0) MacrosList.SelectedIndex = 0;
+        SyncRestartSessionSettings();
         if (!hotkeyResult.AllRegistered) SetStatus(hotkeyResult.Message);
         RefreshAll();
     }
@@ -153,6 +172,11 @@ public partial class MainWindow : System.Windows.Window
 
     private void RecordButton_Click(object? sender, RoutedEventArgs e)
     {
+        if (_restartSession.IsRunning)
+        {
+            SetStatus("自动重启会话正在运行；请先按紧急停止后再录制。");
+            return;
+        }
         if (_recorder.IsRecording) { FinishRecording(); return; }
         var profile = SelectedProfile;
         if (!_recorder.Start(profile, _hotkeySettings)) { ShowRecordingResult("录制只能在目标窗口位于前台时启动。", false); return; }
@@ -191,14 +215,16 @@ public partial class MainWindow : System.Windows.Window
         var answer = WpfMessageBox.Show($"确定删除“{item.Name}”？\n\n{item.DetailLine}\n此操作会删除本机宏文件。", "删除宏", MessageBoxButton.YesNo, MessageBoxImage.Warning, MessageBoxResult.No);
         if (answer != MessageBoxResult.Yes) return;
         _library.DeleteMacro(item.Macro);
-        _macros.Remove(item);
+        _syncingRestartSessionSettings = true;
+        try { _macros.Remove(item); }
+        finally { _syncingRestartSessionSettings = false; }
         SetStatus($"已删除“{item.Name}”。");
         RefreshAll();
     }
 
     private void MacroName_MouseLeftButtonDown(object sender, MouseButtonEventArgs e)
     {
-        if (e.ClickCount != 2 || (sender as FrameworkElement)?.DataContext is not MacroListItem item || _recorder.IsRecording || _player.IsRunning) return;
+        if (e.ClickCount != 2 || (sender as FrameworkElement)?.DataContext is not MacroListItem item || _recorder.IsRecording || _player.IsRunning || _restartSession.IsRunning) return;
         MacrosList.SelectedItem = item;
         item.BeginRename();
         Dispatcher.BeginInvoke(() => FocusRenameEditor(item));
@@ -244,6 +270,11 @@ public partial class MainWindow : System.Windows.Window
 
     private async Task PlayAsync()
     {
+        if (_restartSession.IsRunning || _player.IsRunning)
+        {
+            SetStatus("已有回放会话正在运行。按紧急停止后再开始新的回放。");
+            return;
+        }
         if (SelectedMacro is not { } macro) { SetStatus("请选择要回放的宏。"); return; }
         var profile = SelectedProfile;
         if (!int.TryParse(RepeatText.Text, out var repeats) || repeats < 1) { SetStatus("循环次数必须是正整数。"); return; }
@@ -278,7 +309,17 @@ public partial class MainWindow : System.Windows.Window
                 SetStatus("无法将所选窗口置于前台；请手动点击该窗口后重试。");
                 return;
             }
-            await _player.PlayAsync(macro, profile, new PlaybackOptions(repeats, InfiniteCheck.IsChecked == true, SpeedSlider.Value, mode, delaySeconds, cooldownEvery, cooldownSeconds), selectedWindow);
+            var options = new PlaybackOptions(repeats, InfiniteCheck.IsChecked == true, SpeedSlider.Value, mode, delaySeconds, cooldownEvery, cooldownSeconds);
+            if (_targetSettings.RestartSession.Enabled)
+            {
+                if (!PersistRestartSessionSettingsIfValid()) return;
+                if (CreateRestartSessionRequest(macro, profile, options, selectedWindow) is not { } request) return;
+                await _restartSession.PlayAsync(request);
+            }
+            else
+            {
+                await _player.PlayAsync(macro, profile, options, selectedWindow);
+            }
         }
         catch (Exception ex) { SetStatus(ex.Message); }
         finally
@@ -289,7 +330,168 @@ public partial class MainWindow : System.Windows.Window
     }
 
     private void StopButton_Click(object sender, RoutedEventArgs e) => StopPlayback();
-    private void StopPlayback() { _highlighter.Stop(); _player.EmergencyStop(); SetStatus("已请求紧急停止并释放输入。"); }
+    private void StopPlayback()
+    {
+        _highlighter.Stop();
+        _restartSession.EmergencyStop();
+        _player.EmergencyStop();
+        SetStatus("已请求紧急停止并释放输入。");
+    }
+
+    private RestartSessionRequest? CreateRestartSessionRequest(
+        MacroDefinition primaryMacro,
+        TargetProfile profile,
+        PlaybackOptions options,
+        ManualWindowBinding selectedWindow)
+    {
+        var settings = _targetSettings.RestartSession;
+        var preparation = settings.PreparationMacroId is { } preparationId
+            ? _macros.FirstOrDefault(item => item.Macro.Id == preparationId)?.Macro
+            : null;
+        if (preparation is null)
+        {
+            SetStatus("已启用自动重启，但准备宏不存在或已损坏；请在“自动重启会话”中重新选择。");
+            return null;
+        }
+
+        var request = new RestartSessionRequest(
+            primaryMacro,
+            preparation,
+            profile,
+            options,
+            selectedWindow,
+            settings,
+            profile.ExecutablePath);
+        if (RestartSessionService.ValidateRequest(request) is { } validation)
+        {
+            SetStatus(validation);
+            return null;
+        }
+
+        return request;
+    }
+
+    private void RestartSessionEnabledCheck_Changed(object sender, RoutedEventArgs e)
+    {
+        if (!IsLoaded || _syncingRestartSessionSettings) return;
+        PersistRestartSessionSettingsIfValid();
+    }
+
+    private void RestartPreparationMacroCombo_SelectionChanged(object sender, SelectionChangedEventArgs e)
+    {
+        if (!IsLoaded || _syncingRestartSessionSettings) return;
+        PersistRestartSessionSettingsIfValid();
+    }
+
+    private void RestartSessionSettings_LostKeyboardFocus(object sender, KeyboardFocusChangedEventArgs e)
+    {
+        if (!IsLoaded || _syncingRestartSessionSettings) return;
+        PersistRestartSessionSettingsIfValid();
+    }
+
+    private void SyncRestartSessionSettings()
+    {
+        _syncingRestartSessionSettings = true;
+        try
+        {
+            var settings = _targetSettings.RestartSession;
+            RestartSessionEnabledCheck.IsChecked = settings.Enabled;
+            RestartIntervalMinutesText.Text = settings.IntervalMinutes.ToString();
+            RestartStartupBufferSecondsText.Text = settings.StartupBufferSeconds.ToString();
+            RestartPreparationMacroCombo.SelectedItem = settings.PreparationMacroId is { } id
+                ? _macros.FirstOrDefault(item => item.Macro.Id == id)
+                : null;
+        }
+        finally
+        {
+            _syncingRestartSessionSettings = false;
+        }
+        RefreshRestartSessionUi();
+    }
+
+    private bool PersistRestartSessionSettingsIfValid()
+    {
+        if (_syncingRestartSessionSettings) return true;
+        if (!int.TryParse(RestartIntervalMinutesText.Text, out var intervalMinutes) ||
+            !int.TryParse(RestartStartupBufferSecondsText.Text, out var startupBufferSeconds))
+        {
+            RefreshRestartSessionUi("自动重启的分钟数和启动缓冲都必须是整数。");
+            return false;
+        }
+
+        var existing = _targetSettings.RestartSession;
+        var selectedPreparationId = (RestartPreparationMacroCombo.SelectedItem as MacroListItem)?.Macro.Id;
+        // Removing the saved preparation macro clears the ComboBox automatically.
+        // Keep its ID on disk so the user sees a diagnosis instead of silently
+        // falling back to a different macro on the next start.
+        if (selectedPreparationId is null && existing.PreparationMacroId is { } staleId &&
+            !_macros.Any(item => item.Macro.Id == staleId))
+            selectedPreparationId = staleId;
+
+        var updated = existing with
+        {
+            Enabled = RestartSessionEnabledCheck.IsChecked == true,
+            IntervalMinutes = intervalMinutes,
+            StartupBufferSeconds = startupBufferSeconds,
+            PreparationMacroId = selectedPreparationId
+        };
+        if (updated.Validate() is { } validation)
+        {
+            RefreshRestartSessionUi(validation);
+            return false;
+        }
+
+        _targetSettings = _targetSettings with { RestartSession = updated };
+        _library.SaveZmboxTarget(_targetSettings);
+        RefreshRestartSessionUi();
+        return true;
+    }
+
+    private void RefreshRestartSessionUi(string? validationOverride = null)
+    {
+        if (!IsLoaded) return;
+        var settings = _targetSettings.RestartSession;
+        var busy = _recorder.IsRecording || _player.IsRunning || _restartSession.IsRunning;
+        RestartSessionEnabledCheck.IsEnabled = !busy;
+        RestartIntervalMinutesText.IsEnabled = !busy && settings.Enabled;
+        RestartStartupBufferSecondsText.IsEnabled = !busy && settings.Enabled;
+        RestartPreparationMacroCombo.IsEnabled = !busy && settings.Enabled;
+
+        var selectedPreparation = settings.PreparationMacroId is { } id
+            ? _macros.FirstOrDefault(item => item.Macro.Id == id)?.Macro
+            : null;
+        var message = validationOverride ?? settings.Validate();
+        var warning = message is not null;
+        if (!warning && !settings.Enabled)
+            message = "已关闭；普通回放不会关闭或重启造梦盒子。";
+        else if (!warning && settings.PreparationMacroId is null)
+        {
+            message = "启用后必须选择一个与主宏不同的准备宏。";
+            warning = true;
+        }
+        else if (!warning && selectedPreparation is null)
+        {
+            message = "已保存的准备宏不存在或损坏，请重新选择。";
+            warning = true;
+        }
+        else if (!warning && SelectedMacro?.Id == selectedPreparation?.Id)
+        {
+            message = "准备宏不能与当前主宏相同。";
+            warning = true;
+        }
+        else if (!warning && (string.IsNullOrWhiteSpace(_targetSettings.ExecutablePath) || !File.Exists(_targetSettings.ExecutablePath)))
+        {
+            message = "尚未记忆可用的造梦盒子 EXE 路径；自动重启无法开始。";
+            warning = true;
+        }
+        else if (!warning)
+            message = $"主宏安全结束后，运行满 {settings.IntervalMinutes} 分钟会正常重启；启动后等待 {settings.StartupBufferSeconds} 秒并执行一次准备宏。";
+
+        RestartSessionHintText.Text = message;
+        RestartSessionHintText.Foreground = warning
+            ? new SolidColorBrush(WpfColor.FromRgb(244, 180, 65))
+            : new SolidColorBrush(WpfColor.FromRgb(142, 164, 181));
+    }
     private void BackgroundPassedButton_Click(object sender, RoutedEventArgs e) => MarkBackground(BackgroundCapability.Verified);
     private void BackgroundFailedButton_Click(object sender, RoutedEventArgs e) => MarkBackground(BackgroundCapability.Unsupported);
 
@@ -383,6 +585,23 @@ public partial class MainWindow : System.Windows.Window
         }
     }
 
+    private void OnRestartSessionWindowBindingChanged(ManualWindowBinding binding)
+    {
+        if (!Dispatcher.CheckAccess())
+        {
+            Dispatcher.BeginInvoke(() => OnRestartSessionWindowBindingChanged(binding));
+            return;
+        }
+
+        // A restart is part of the same explicitly approved session. Keep the
+        // new PID as the current lock without showing another countdown.
+        _manualWindow = binding;
+        SelectedWindowText.Text =
+            $"自动重启后已重新锁定窗口\n标题：{binding.Window.WindowTitle}\n进程：{binding.Window.ProcessName} · PID {binding.Window.ProcessId}\n" +
+            $"位置与尺寸：({binding.Window.Layout.WindowX}, {binding.Window.Layout.WindowY}) · {binding.Window.Layout.WindowWidth} × {binding.Window.Layout.WindowHeight}\n开始后仅绑定此窗口。";
+        RefreshPreflight();
+    }
+
     private TargetProfile RememberCapturedWindow(TargetProfile profile, WindowCandidate selected)
     {
         var executable = string.IsNullOrWhiteSpace(selected.ExecutablePath) ? profile.ExecutablePath : selected.ExecutablePath;
@@ -405,7 +624,8 @@ public partial class MainWindow : System.Windows.Window
         {
             ExecutablePath = updated.ExecutablePath,
             WindowTitleContains = updated.WindowTitleContains,
-            BackgroundCapability = updated.BackgroundCapability
+            BackgroundCapability = updated.BackgroundCapability,
+            RestartSession = _targetSettings.RestartSession
         };
         _library.SaveZmboxTarget(_targetSettings);
         return updated;
@@ -536,6 +756,7 @@ public partial class MainWindow : System.Windows.Window
     {
         RefreshMacroSummary();
         RefreshBackgroundState();
+        RefreshRestartSessionUi();
         RefreshPreflight();
         RefreshControlState();
     }
@@ -580,8 +801,8 @@ public partial class MainWindow : System.Windows.Window
     {
         if (!Dispatcher.CheckAccess()) { Dispatcher.BeginInvoke(RefreshControlState); return; }
         if (!IsLoaded) return;
-        var busy = _recorder.IsRecording || _player.IsRunning;
-        RecordButton.IsEnabled = !_player.IsRunning;
+        var busy = _recorder.IsRecording || _player.IsRunning || _restartSession.IsRunning;
+        RecordButton.IsEnabled = !_player.IsRunning && !_restartSession.IsRunning;
         RecordButton.Content = _recorder.IsRecording ? $"结束并保存 ({_hotkeySettings.RecordHotkey.DisplayText})" : $"开始录制 ({_hotkeySettings.RecordHotkey.DisplayText})";
         PlayButton.IsEnabled = !busy && SelectedMacro is not null && SelectedProfile is not null;
         PlayButton.Content = $"开始回放 ({_hotkeySettings.PlayHotkey.DisplayText})";
@@ -597,6 +818,10 @@ public partial class MainWindow : System.Windows.Window
         SelectWindowButton.IsEnabled = !busy && SelectedProfile is not null;
         BackgroundPassedButton.IsEnabled = !busy;
         BackgroundFailedButton.IsEnabled = !busy;
+        RestartSessionEnabledCheck.IsEnabled = !busy;
+        RestartIntervalMinutesText.IsEnabled = !busy && _targetSettings.RestartSession.Enabled;
+        RestartStartupBufferSecondsText.IsEnabled = !busy && _targetSettings.RestartSession.Enabled;
+        RestartPreparationMacroCombo.IsEnabled = !busy && _targetSettings.RestartSession.Enabled;
     }
 
     private void SetStatus(string text)
@@ -605,7 +830,7 @@ public partial class MainWindow : System.Windows.Window
         StatusText.Text = text;
         StatusPill.Background = text.Contains("失败") || text.Contains("错误") || text.Contains("找不到") || text.Contains("不支持") || text.Contains("已停止")
             ? new SolidColorBrush(WpfColor.FromRgb(92, 45, 38))
-            : text.Contains("等待") || text.Contains("冷却") || text.Contains("录制") || text.Contains("回放")
+            : text.Contains("等待") || text.Contains("冷却") || text.Contains("录制") || text.Contains("回放") || text.Contains("重启") || text.Contains("准备") || text.Contains("启动")
                 ? new SolidColorBrush(WpfColor.FromRgb(18, 61, 57))
                 : new SolidColorBrush(WpfColor.FromRgb(35, 53, 68));
         RefreshControlState();

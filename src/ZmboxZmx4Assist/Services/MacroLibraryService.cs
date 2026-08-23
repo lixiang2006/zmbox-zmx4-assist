@@ -33,7 +33,10 @@ public sealed class MacroLibraryService
         if (!File.Exists(_targetPath)) return new ZmboxTargetSettings();
         try
         {
-            return JsonSerializer.Deserialize<ZmboxTargetSettings>(File.ReadAllText(_targetPath), JsonOptions) ?? new ZmboxTargetSettings();
+            var settings = JsonSerializer.Deserialize<ZmboxTargetSettings>(File.ReadAllText(_targetPath), JsonOptions) ?? new ZmboxTargetSettings();
+            // Older or manually edited local JSON can omit/null the new block.
+            // Normalize it in memory without overwriting the user's source file.
+            return settings with { RestartSession = settings.RestartSession ?? new RestartSessionSettings() };
         }
         catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or JsonException or NotSupportedException)
         {

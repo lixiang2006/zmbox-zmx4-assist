@@ -1,5 +1,11 @@
 # Changelog
 
+## 1.1.0
+
+- Add an opt-in automatic restart session for 造梦盒子: after a safe primary-macro boundary, request normal close, launch the remembered executable, restore the locked physical layout, wait for startup, run one preparation macro, and continue remaining primary iterations.
+- Keep restart state local to the target settings; default to disabled, require a distinct preparation macro and a verified executable path, and preserve the selected input channel.
+- Add exact launched-PID binding, process-start identity checks, one bounded retry for a process that exits before showing its window, and safe failure paths that never force-kill or click unknown dialogs.
+
 ## 1.0.4
 
 - Rename user-visible application, documentation, and release labels to 造梦盒子·造梦西游四辅助工具.

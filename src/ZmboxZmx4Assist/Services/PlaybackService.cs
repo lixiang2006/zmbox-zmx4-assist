@@ -6,7 +6,7 @@ using ZmboxZmx4Assist.Utilities;
 
 namespace ZmboxZmx4Assist.Services;
 
-public sealed class PlaybackService
+public sealed class PlaybackService : IPlaybackRoundExecutor
 {
     private const int ForegroundRecoverySeconds = 5;
     private const int BackgroundRecoverySeconds = 15;
@@ -23,6 +23,36 @@ public sealed class PlaybackService
 
     public async Task PlayAsync(MacroDefinition macro, TargetProfile profile, PlaybackOptions options, ManualWindowBinding? manualWindow = null)
     {
+        await PlayCoreAsync(macro, profile, options, manualWindow, CancellationToken.None, reportStop: true, reportCompletion: true);
+    }
+
+    public Task<PlaybackRunResult> PlaySingleIterationAsync(
+        MacroDefinition macro,
+        TargetProfile profile,
+        PlaybackOptions options,
+        ManualWindowBinding manualWindow,
+        CancellationToken cancellationToken)
+    {
+        var singleIteration = options with
+        {
+            RepeatCount = 1,
+            InfiniteLoop = false,
+            InterIterationDelaySeconds = 0,
+            CooldownEveryIterations = 1,
+            CooldownSeconds = 0
+        };
+        return PlayCoreAsync(macro, profile, singleIteration, manualWindow, cancellationToken, reportStop: false, reportCompletion: false);
+    }
+
+    private async Task<PlaybackRunResult> PlayCoreAsync(
+        MacroDefinition macro,
+        TargetProfile profile,
+        PlaybackOptions options,
+        ManualWindowBinding? manualWindow,
+        CancellationToken cancellationToken,
+        bool reportStop,
+        bool reportCompletion)
+    {
         if (_running is not null) throw new InvalidOperationException("已有宏正在回放。");
         var error = MacroValidator.Validate(macro);
         if (error is not null) throw new InvalidOperationException(error);
@@ -32,11 +62,13 @@ public sealed class PlaybackService
         if (options.CooldownEveryIterations is < 1 or > 1000) throw new InvalidOperationException("周期冷却轮数必须在 1 到 1000 之间。");
         if (options.CooldownSeconds is < 0 or > 900) throw new InvalidOperationException("周期冷却等待必须在 0 到 900 秒之间。");
 
-        var window = EnsureTargetReady(macro, profile, options, manualWindow);
-        _running = new CancellationTokenSource();
+        var window = IntPtr.Zero;
+        _running = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
         StateChanged?.Invoke();
         try
         {
+            _running.Token.ThrowIfCancellationRequested();
+            window = EnsureTargetReady(macro, profile, options, manualWindow);
             var iteration = 0;
             do
             {
@@ -54,7 +86,8 @@ public sealed class PlaybackService
                 }
             }
             while (options.InfiniteLoop || iteration < Math.Max(1, options.RepeatCount));
-            StatusChanged?.Invoke("回放完成。");
+            if (reportCompletion) StatusChanged?.Invoke("回放完成。");
+            return PlaybackRunResult.Completed;
         }
         catch (OperationCanceledException ex)
         {
@@ -63,13 +96,17 @@ public sealed class PlaybackService
                 ? "已请求停止。"
                 : ex.Message;
             StatusChanged?.Invoke($"回放已停止：{reason}");
-            PlaybackStopped?.Invoke(new PlaybackStopResult(userRequested ? PlaybackStopKind.UserRequested : PlaybackStopKind.RecoveryTimedOut, reason));
+            var stop = new PlaybackStopResult(userRequested ? PlaybackStopKind.UserRequested : PlaybackStopKind.RecoveryTimedOut, reason);
+            if (reportStop) PlaybackStopped?.Invoke(stop);
+            return new PlaybackRunResult(false, stop);
         }
         catch (Exception ex)
         {
             var reason = string.IsNullOrWhiteSpace(ex.Message) ? "发生未知输入错误。" : ex.Message;
             StatusChanged?.Invoke($"回放已停止：{reason}");
-            PlaybackStopped?.Invoke(new PlaybackStopResult(PlaybackStopKind.InputFailure, reason));
+            var stop = new PlaybackStopResult(PlaybackStopKind.InputFailure, reason);
+            if (reportStop) PlaybackStopped?.Invoke(stop);
+            return new PlaybackRunResult(false, stop);
         }
         finally
         {

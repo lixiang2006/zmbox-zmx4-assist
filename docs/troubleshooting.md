@@ -12,6 +12,22 @@ Keep the recorded display DPI and resolution. Position and size may vary by up t
 
 Use foreground system input. The background option is an ordinary Windows message experiment and is not a compatibility promise.
 
+## Automatic restart session will not start
+
+It is intentionally disabled unless you choose a different, valid preparation
+macro and the tool has remembered an existing absolute `造梦盒子.exe` path from a
+locked target window. The preparation macro and primary macro must have
+compatible display/DPI/window layouts. If normal close does not finish within
+30 seconds, handle the game's own confirmation dialog yourself; the tool does
+not force-close it or click an unknown dialog.
+
+## Restarted Zmbox does not resume the macro
+
+The tool only binds the PID it started itself. It waits up to 120 seconds for a
+visible Zmbox window, restores the original physical position and size only
+when display resolution/DPI are unchanged, then runs the preparation macro
+once. A failure in any of those checks stops safely and leaves input released.
+
 ## Old macros are missing
 
 Check `%LOCALAPPDATA%\GameMacro\macros` and `%LOCALAPPDATA%\ZmboxZmx4Assist\macros`. The first launch copies legacy data; it never deletes the old files. A malformed JSON macro is left in place and reported by the application.

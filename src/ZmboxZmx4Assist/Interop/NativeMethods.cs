@@ -13,7 +13,7 @@ internal static class NativeMethods
     internal const int WM_KEYDOWN = 0x0100, WM_KEYUP = 0x0101, WM_SYSKEYDOWN = 0x0104, WM_SYSKEYUP = 0x0105;
     internal const int WM_MOUSEMOVE = 0x0200, WM_LBUTTONDOWN = 0x0201, WM_LBUTTONUP = 0x0202, WM_RBUTTONDOWN = 0x0204, WM_RBUTTONUP = 0x0205;
     internal const int WM_MBUTTONDOWN = 0x0207, WM_MBUTTONUP = 0x0208, WM_MOUSEWHEEL = 0x020A, WM_XBUTTONDOWN = 0x020B, WM_XBUTTONUP = 0x020C;
-    internal const int WM_HOTKEY = 0x0312;
+    internal const int WM_HOTKEY = 0x0312, WM_CLOSE = 0x0010;
     internal const uint INPUT_MOUSE = 0, INPUT_KEYBOARD = 1;
     internal const uint KEYEVENTF_KEYUP = 0x0002, KEYEVENTF_EXTENDEDKEY = 0x0001;
     internal const uint MOUSEEVENTF_MOVE = 0x0001, MOUSEEVENTF_LEFTDOWN = 0x0002, MOUSEEVENTF_LEFTUP = 0x0004,
@@ -23,7 +23,7 @@ internal static class NativeMethods
     private const long WS_POPUP = unchecked((long)0x80000000), SS_BLACKRECT = 0x00000004L;
     private const long WS_EX_TRANSPARENT = 0x00000020L, WS_EX_TOOLWINDOW = 0x00000080L, WS_EX_NOACTIVATE = 0x08000000L, WS_EX_TOPMOST = 0x00000008L;
     private static readonly IntPtr HwndTopmost = new(-1);
-    private const uint SWP_NOACTIVATE = 0x0010, SWP_SHOWWINDOW = 0x0040, SWP_NOOWNERZORDER = 0x0200;
+    private const uint SWP_NOZORDER = 0x0004, SWP_NOACTIVATE = 0x0010, SWP_SHOWWINDOW = 0x0040, SWP_NOOWNERZORDER = 0x0200;
     private const int DWMWA_EXTENDED_FRAME_BOUNDS = 9;
 
     internal delegate IntPtr HookProc(int nCode, IntPtr wParam, IntPtr lParam);
@@ -151,7 +151,8 @@ internal static class NativeMethods
                     process.ProcessName,
                     executablePath,
                     title,
-                    layout));
+                    layout,
+                    TryGetProcessStartedAtUtc(process)));
             }
             catch
             {
@@ -188,7 +189,8 @@ internal static class NativeMethods
                 process.ProcessName,
                 executablePath,
                 title,
-                layout);
+                layout,
+                TryGetProcessStartedAtUtc(process));
         }
         catch
         {
@@ -202,6 +204,19 @@ internal static class NativeMethods
         if (!IsWindow(window)) return false;
         GetWindowThreadProcessId(window, out var processId);
         return processId == expectedProcessId;
+    }
+
+    internal static bool TrySetWindowBounds(IntPtr window, DisplayLayout layout)
+    {
+        if (!IsWindow(window) || !DisplayLayoutComparer.HasUsableWindowBounds(layout)) return false;
+        return SetWindowPos(
+            window,
+            IntPtr.Zero,
+            layout.WindowX,
+            layout.WindowY,
+            layout.WindowWidth,
+            layout.WindowHeight,
+            SWP_NOACTIVATE | SWP_NOZORDER);
     }
 
     internal static IntPtr MakeMouseLParam(IntPtr window, int screenX, int screenY)
@@ -244,4 +259,16 @@ internal static class NativeMethods
     }
 
     internal static IntPtr MakeKeyLParam(bool keyUp) => (IntPtr)(1 | (keyUp ? unchecked((int)0xC0000000) : 0));
+
+    private static DateTime? TryGetProcessStartedAtUtc(Process process)
+    {
+        try
+        {
+            return process.StartTime.ToUniversalTime();
+        }
+        catch (Exception ex) when (ex is Win32Exception or InvalidOperationException or NotSupportedException)
+        {
+            return null;
+        }
+    }
 }

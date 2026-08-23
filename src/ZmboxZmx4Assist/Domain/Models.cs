@@ -68,7 +68,7 @@ public sealed record LayoutComparison(
     int HeightDifference = 0,
     bool IsTransient = false);
 
-public enum PlaybackStopKind { UserRequested, RecoveryTimedOut, InputFailure }
+public enum PlaybackStopKind { UserRequested, RecoveryTimedOut, InputFailure, RestartFailure }
 
 public sealed record PlaybackStopResult(PlaybackStopKind Kind, string Reason)
 {
@@ -103,6 +103,7 @@ public sealed record ZmboxTargetSettings
     public string ExecutablePath { get; init; } = string.Empty;
     public string WindowTitleContains { get; init; } = "造梦盒子";
     public BackgroundCapability BackgroundCapability { get; init; } = BackgroundCapability.Unknown;
+    public RestartSessionSettings RestartSession { get; init; } = new();
 
     public TargetProfile ToCompatibilityProfile() => new()
     {
@@ -115,10 +116,44 @@ public sealed record ZmboxTargetSettings
 }
 
 /// <summary>
+/// Local-only settings for the optional safe restart session. Missing values in
+/// older target.json files intentionally deserialize to these disabled defaults.
+/// </summary>
+public sealed record RestartSessionSettings
+{
+    public const int DefaultIntervalMinutes = 120;
+    public const int DefaultStartupBufferSeconds = 60;
+    public const int MinimumIntervalMinutes = 1;
+    public const int MaximumIntervalMinutes = 1_440;
+    public const int MaximumStartupBufferSeconds = 900;
+
+    public bool Enabled { get; init; }
+    public int IntervalMinutes { get; init; } = DefaultIntervalMinutes;
+    public Guid? PreparationMacroId { get; init; }
+    public int StartupBufferSeconds { get; init; } = DefaultStartupBufferSeconds;
+
+    public string? Validate()
+    {
+        if (IntervalMinutes is < MinimumIntervalMinutes or > MaximumIntervalMinutes)
+            return $"自动重启周期必须在 {MinimumIntervalMinutes} 到 {MaximumIntervalMinutes} 分钟之间。";
+        if (StartupBufferSeconds is < 0 or > MaximumStartupBufferSeconds)
+            return $"启动缓冲必须在 0 到 {MaximumStartupBufferSeconds} 秒之间。";
+        return null;
+    }
+}
+
+/// <summary>
 /// A visible top-level window selected by the user for one playback session.
 /// This is deliberately runtime-only and is never written into macro JSON.
 /// </summary>
-public sealed record WindowCandidate(IntPtr Handle, int ProcessId, string ProcessName, string ExecutablePath, string WindowTitle, DisplayLayout Layout)
+public sealed record WindowCandidate(
+    IntPtr Handle,
+    int ProcessId,
+    string ProcessName,
+    string ExecutablePath,
+    string WindowTitle,
+    DisplayLayout Layout,
+    DateTime? ProcessStartedAtUtc = null)
 {
     public string ProcessLine => string.IsNullOrWhiteSpace(ExecutablePath)
         ? $"{ProcessName} · PID {ProcessId} · 路径未读取"
@@ -170,6 +205,20 @@ public sealed record PlaybackOptions(
     public bool ShouldCooldownAfter(int completedIterations, bool hasNextIteration) =>
         hasNextIteration && CooldownEveryIterations > 0 && CooldownSeconds > 0 && completedIterations % CooldownEveryIterations == 0;
 }
+
+public sealed record PlaybackRunResult(bool Succeeded, PlaybackStopResult? StopResult = null)
+{
+    public static PlaybackRunResult Completed { get; } = new(true);
+}
+
+public sealed record RestartSessionRequest(
+    MacroDefinition PrimaryMacro,
+    MacroDefinition PreparationMacro,
+    TargetProfile Profile,
+    PlaybackOptions PlaybackOptions,
+    ManualWindowBinding InitialWindow,
+    RestartSessionSettings Settings,
+    string ExecutablePath);
 
 public sealed record HotkeySettings
 {
