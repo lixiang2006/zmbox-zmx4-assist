@@ -7,7 +7,7 @@ namespace ZmboxZmx4Assist.Services;
 
 public sealed class TargetWindowService
 {
-    public IntPtr Find(TargetProfile profile) => profile.Id == ZmboxTargetSettings.TargetProfileId ? FindZmbox() : NativeMethods.FindWindow(profile);
+    public IntPtr Find() => FindZmbox();
 
     public IntPtr FindZmbox()
     {
@@ -107,16 +107,6 @@ public sealed class TargetWindowService
 
     public DisplayLayout GetLayout(IntPtr window) => NativeMethods.GetDisplayLayout(window);
 
-    public bool MatchesProfile(WindowCandidate window, TargetProfile profile)
-    {
-        if (profile.Id == ZmboxTargetSettings.TargetProfileId) return IsZmboxWindow(window);
-        if (!window.WindowTitle.Contains(profile.WindowTitleContains, StringComparison.OrdinalIgnoreCase)) return false;
-        var expectedPath = Path.GetFullPath(profile.ExecutablePath);
-        if (!string.IsNullOrWhiteSpace(window.ExecutablePath))
-            return string.Equals(Path.GetFullPath(window.ExecutablePath), expectedPath, StringComparison.OrdinalIgnoreCase);
-        return string.Equals(window.ProcessName, Path.GetFileNameWithoutExtension(expectedPath), StringComparison.OrdinalIgnoreCase);
-    }
-
     public string? ValidateSelectedWindow(WindowCandidate window)
     {
         if (!IsWindow(window.Handle)) return "你选择的窗口已关闭或句柄已失效，请重新选择。";
@@ -204,17 +194,17 @@ public sealed class TargetWindowService
         return true;
     }
 
-    public TargetPreflightResult Inspect(TargetProfile profile, MacroDefinition? macro, PlaybackMode mode)
+    public TargetPreflightResult Inspect(ZmboxTargetSettings target, MacroDefinition? macro, PlaybackMode mode)
     {
-        var window = Find(profile);
+        var window = Find();
         if (window == IntPtr.Zero)
-            return new TargetPreflightResult(false, string.Empty, false, false, profile.BackgroundCapability != BackgroundCapability.Unsupported, "未找到匹配的目标窗口。请确认启动器、路径与窗口标题。");
+            return new TargetPreflightResult(false, string.Empty, false, false, target.BackgroundCapability != BackgroundCapability.Unsupported, "未找到匹配的目标窗口。请确认启动器、路径与窗口标题。");
 
         var layout = macro?.DisplayLayout is null
             ? new LayoutComparison(true, "未选择宏，无需比较录制布局。")
             : CompareLayout(window, macro.DisplayLayout);
         var layoutMatches = layout.IsMatch;
-        var backgroundAllowed = profile.BackgroundCapability != BackgroundCapability.Unsupported;
+        var backgroundAllowed = target.BackgroundCapability != BackgroundCapability.Unsupported;
         var foreground = IsForeground(window);
         var title = NativeMethods.GetWindowTitle(window);
         var message = !layoutMatches
@@ -222,12 +212,12 @@ public sealed class TargetWindowService
             : mode == PlaybackMode.ForegroundSystemInput && !foreground
                 ? "窗口已找到；前台回放前请先将目标窗口置于前台。"
                 : mode == PlaybackMode.ExperimentalTargetWindow && !backgroundAllowed
-                    ? "该配置档已标记为不支持后台窗口消息，仅可前台回放。"
+                    ? "该目标已标记为不支持后台窗口消息，仅可前台回放。"
                     : "目标窗口与当前回放条件正常。";
         return new TargetPreflightResult(true, title, foreground, layoutMatches, backgroundAllowed, message);
     }
 
-    public TargetPreflightResult Inspect(ManualWindowBinding binding, TargetProfile profile, MacroDefinition? macro, PlaybackMode mode)
+    public TargetPreflightResult Inspect(ManualWindowBinding binding, ZmboxTargetSettings target, MacroDefinition? macro, PlaybackMode mode)
     {
         var window = binding.Window;
         var validation = ValidateSelectedWindow(window);
@@ -238,15 +228,15 @@ public sealed class TargetWindowService
             ? new LayoutComparison(true, "未选择宏，无需比较录制布局。")
             : CompareLayout(window.Handle, macro.DisplayLayout);
         var foreground = IsForeground(window.Handle);
-        var backgroundAllowed = binding.MatchesSelectedProfile && profile.BackgroundCapability != BackgroundCapability.Unsupported;
+        var backgroundAllowed = binding.MatchesTarget && target.BackgroundCapability != BackgroundCapability.Unsupported;
         var message = !layout.IsMatch
             ? layout.Reason
-            : !binding.MatchesSelectedProfile
-                ? "手动选择的窗口不匹配当前配置档：仅可使用前台系统输入。"
+            : !binding.MatchesTarget
+                ? "手动选择的窗口不匹配当前目标：仅可使用前台系统输入。"
                 : mode == PlaybackMode.ForegroundSystemInput && !foreground
                     ? "已手动选择窗口；开始回放时会尝试将其置于前台。"
                     : mode == PlaybackMode.ExperimentalTargetWindow && !backgroundAllowed
-                        ? "该配置档不允许后台窗口消息。"
+                        ? "该目标不允许后台窗口消息。"
                         : "已手动绑定此窗口；本次回放不会自动改选同名窗口。";
         return new TargetPreflightResult(true, window.WindowTitle, foreground, layout.IsMatch, backgroundAllowed, message);
     }

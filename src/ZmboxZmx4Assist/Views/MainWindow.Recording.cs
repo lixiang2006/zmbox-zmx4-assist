@@ -20,8 +20,7 @@ public partial class MainWindow
                 : "回放正在运行；请先按紧急停止后再录制。");
             return;
         }
-        var profile = SelectedProfile;
-        if (!_recorder.Start(profile, _hotkeySettings)) { ShowRecordingResult("录制只能在目标窗口位于前台时启动。", false); return; }
+        if (!_recorder.Start(_hotkeySettings)) { ShowRecordingResult("录制只能在目标窗口位于前台时启动。", false); return; }
         _recordingIndicator.ShowRecording(_hotkeySettings.RecordHotkey.DisplayText);
         _notify?.Invoke("造梦盒子·造梦西游四辅助工具", $"已开始录制；按 {_hotkeySettings.RecordHotkey.DisplayText} 结束并保存。");
         SetStatus("正在录制；切换离开目标窗口会自动丢弃本次录制。");
@@ -30,16 +29,15 @@ public partial class MainWindow
 
     private void FinishRecording()
     {
-        var profile = SelectedProfile;
-        var window = _targets.Find(profile);
+        var window = _targets.Find();
         if (_recorder.WasAborted || window == IntPtr.Zero) { _recorder.Abort("录制已丢弃。"); RefreshControlState(); return; }
         var requestedName = MacroNameText.Text.Trim();
         var name = MacroLibraryService.ValidateMacroName(requestedName) is null ? requestedName : "未命名宏";
-        var macro = _recorder.Stop(name, profile.Id, _targets.GetLayout(window));
+        var macro = _recorder.Stop(name, _targets.GetLayout(window));
         try
         {
             _library.SaveMacro(macro);
-            var item = new MacroListItem(macro, ProfileNameFor(macro.TargetProfileId));
+            var item = new MacroListItem(macro);
             _macros.Add(item);
             MacrosList.SelectedItem = item;
             ShowRecordingResult($"已保存“{macro.Name}” · {macro.Events.Count} 个事件");

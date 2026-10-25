@@ -273,10 +273,8 @@ public sealed class RestartSessionTests
         public RestartSessionRequest Request(int repeatCount = 2, int intervalMinutes = 120, int startupBufferSeconds = 60) => new(
             Primary,
             Preparation,
-            new TargetProfile
+            new ZmboxTargetSettings
             {
-                Id = ZmboxTargetSettings.TargetProfileId,
-                Name = ZmboxTargetSettings.DisplayName,
                 ExecutablePath = ExecutablePath,
                 WindowTitleContains = "造梦盒子",
                 BackgroundCapability = BackgroundCapability.Verified
@@ -339,7 +337,7 @@ public sealed class RestartSessionTests
         public int EmergencyStopCalls { get; private set; }
         public bool IsRunning => false;
 
-        public Task<PlaybackRunResult> PlaySingleIterationAsync(MacroDefinition macro, TargetProfile profile, PlaybackOptions options, ManualWindowBinding manualWindow, CancellationToken cancellationToken)
+        public Task<PlaybackRunResult> PlaySingleIterationAsync(MacroDefinition macro, ZmboxTargetSettings target, PlaybackOptions options, ManualWindowBinding manualWindow, CancellationToken cancellationToken)
         {
             cancellationToken.ThrowIfCancellationRequested();
             ExecutedMacros.Add(macro.Name);

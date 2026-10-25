@@ -22,9 +22,9 @@ public sealed class TargetStateMonitorTests
         var guard = new FakeGuard();
         var monitor = BuildMonitor(guard, new FakeProbe(), interval: 100);
 
-        var first = monitor.Check(FirstWindow, Macro(), Profile(), ForegroundOptions(), null);
+        var first = monitor.Check(FirstWindow, Macro(), TargetSettings(), ForegroundOptions(), null);
         _now += 99;
-        var second = monitor.Check(FirstWindow, Macro(), Profile(), ForegroundOptions(), null);
+        var second = monitor.Check(FirstWindow, Macro(), TargetSettings(), ForegroundOptions(), null);
 
         Assert.IsTrue(first.IsReady);
         Assert.IsTrue(second.IsReady);
@@ -37,9 +37,9 @@ public sealed class TargetStateMonitorTests
         var guard = new FakeGuard();
         var monitor = BuildMonitor(guard, new FakeProbe(), interval: 100);
 
-        monitor.Check(FirstWindow, Macro(), Profile(), ForegroundOptions(), null);
+        monitor.Check(FirstWindow, Macro(), TargetSettings(), ForegroundOptions(), null);
         _now += 100;
-        monitor.Check(FirstWindow, Macro(), Profile(), ForegroundOptions(), null);
+        monitor.Check(FirstWindow, Macro(), TargetSettings(), ForegroundOptions(), null);
 
         Assert.AreEqual(2, guard.Checks);
     }
@@ -51,7 +51,7 @@ public sealed class TargetStateMonitorTests
         var probe = new FakeProbe { WindowAlive = false };
         var monitor = BuildMonitor(guard, probe);
 
-        var readiness = monitor.Check(FirstWindow, Macro(), Profile(), ForegroundOptions(), null);
+        var readiness = monitor.Check(FirstWindow, Macro(), TargetSettings(), ForegroundOptions(), null);
 
         Assert.IsFalse(readiness.IsReady);
         StringAssert.Contains(readiness.Reason, "句柄已失效");
@@ -65,7 +65,7 @@ public sealed class TargetStateMonitorTests
         var probe = new FakeProbe { Foreground = false };
         var monitor = BuildMonitor(guard, probe);
 
-        var readiness = monitor.Check(FirstWindow, Macro(), Profile(), ForegroundOptions(), null);
+        var readiness = monitor.Check(FirstWindow, Macro(), TargetSettings(), ForegroundOptions(), null);
 
         Assert.IsFalse(readiness.IsReady);
         StringAssert.Contains(readiness.Reason, "已切离");
@@ -78,9 +78,9 @@ public sealed class TargetStateMonitorTests
         var guard = new FakeGuard { CheckResult = new TargetReadiness(FirstWindow, false, "目标窗口尚未回到前台。") };
         var monitor = BuildMonitor(guard, new FakeProbe(), interval: 100);
 
-        var first = monitor.Check(FirstWindow, Macro(), Profile(), ForegroundOptions(), null);
+        var first = monitor.Check(FirstWindow, Macro(), TargetSettings(), ForegroundOptions(), null);
         _now += 1;
-        var second = monitor.Check(FirstWindow, Macro(), Profile(), ForegroundOptions(), null);
+        var second = monitor.Check(FirstWindow, Macro(), TargetSettings(), ForegroundOptions(), null);
 
         Assert.IsFalse(first.IsReady);
         Assert.IsFalse(second.IsReady);
@@ -93,9 +93,9 @@ public sealed class TargetStateMonitorTests
         var guard = new FakeGuard();
         var monitor = BuildMonitor(guard, new FakeProbe(), interval: 100);
 
-        monitor.Check(FirstWindow, Macro(), Profile(), ForegroundOptions(), null);
+        monitor.Check(FirstWindow, Macro(), TargetSettings(), ForegroundOptions(), null);
         _now += 1;
-        monitor.Check(SecondWindow, Macro(), Profile(), ForegroundOptions(), null);
+        monitor.Check(SecondWindow, Macro(), TargetSettings(), ForegroundOptions(), null);
 
         Assert.AreEqual(2, guard.Checks);
     }
@@ -106,8 +106,8 @@ public sealed class TargetStateMonitorTests
         var guard = new FakeGuard();
         var monitor = BuildMonitor(guard, new FakeProbe(), interval: 100);
 
-        var found = monitor.Find(Macro(), Profile(), ForegroundOptions(), null);
-        var checkedAgain = monitor.Check(FirstWindow, Macro(), Profile(), ForegroundOptions(), null);
+        var found = monitor.Find(Macro(), TargetSettings(), ForegroundOptions(), null);
+        var checkedAgain = monitor.Check(FirstWindow, Macro(), TargetSettings(), ForegroundOptions(), null);
 
         Assert.IsTrue(found.IsReady);
         Assert.IsTrue(checkedAgain.IsReady);
@@ -115,16 +115,16 @@ public sealed class TargetStateMonitorTests
     }
 
     [TestMethod]
-    public void Check_PausesImmediatelyWhenABackgroundWindowIsNotTheSelectedProfile()
+    public void Check_PausesImmediatelyWhenABackgroundWindowIsNotTheSelectedTargetSettings()
     {
         var guard = new FakeGuard();
         var monitor = BuildMonitor(guard, new FakeProbe());
         var binding = new ManualWindowBinding(
             new WindowCandidate(FirstWindow, 37768, "造梦盒子", "D:\\game\\造梦盒子.exe", "造梦盒子v1.8", Layout),
-            MatchesSelectedProfile: false);
+            MatchesTarget: false);
         var options = PlaybackOptions.Default with { Mode = PlaybackMode.ExperimentalTargetWindow };
 
-        var readiness = monitor.Check(FirstWindow, Macro(), Profile(), options, binding);
+        var readiness = monitor.Check(FirstWindow, Macro(), TargetSettings(), options, binding);
 
         Assert.IsFalse(readiness.IsReady);
         StringAssert.Contains(readiness.Reason, "不匹配");
@@ -142,10 +142,8 @@ public sealed class TargetStateMonitorTests
         Events = [new RecordedEvent { Kind = InputEventKind.KeyDown, VirtualKey = 0x57 }]
     };
 
-    private static TargetProfile Profile() => new()
+    private static ZmboxTargetSettings TargetSettings() => new()
     {
-        Id = ZmboxTargetSettings.TargetProfileId,
-        Name = ZmboxTargetSettings.DisplayName,
         WindowTitleContains = "造梦盒子",
         BackgroundCapability = BackgroundCapability.Verified
     };
@@ -160,10 +158,10 @@ public sealed class TargetStateMonitorTests
 
         public TargetReadiness FindResult { get; init; } = new(FirstWindow, true, string.Empty);
 
-        public TargetReadiness Find(MacroDefinition macro, TargetProfile profile, PlaybackOptions options, ManualWindowBinding? manualWindow) =>
+        public TargetReadiness Find(MacroDefinition macro, ZmboxTargetSettings target, PlaybackOptions options, ManualWindowBinding? manualWindow) =>
             FindResult with { Window = manualWindow?.Window.Handle ?? FindResult.Window };
 
-        public TargetReadiness Check(IntPtr window, MacroDefinition macro, TargetProfile profile, PlaybackOptions options, ManualWindowBinding? manualWindow)
+        public TargetReadiness Check(IntPtr window, MacroDefinition macro, ZmboxTargetSettings target, PlaybackOptions options, ManualWindowBinding? manualWindow)
         {
             Checks++;
             return CheckResult with { Window = window };

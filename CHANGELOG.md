@@ -5,9 +5,9 @@
 - Add an opt-in automatic restart session for 造梦盒子: after a safe primary-macro boundary, request normal close, launch the remembered executable, restore the locked physical layout, wait for startup, run one preparation macro, and continue remaining primary iterations.
 - Keep restart state local to the target settings; default to disabled, require a distinct preparation macro and a verified executable path, and preserve the selected input channel.
 - Add exact launched-PID binding, process-start identity checks, one bounded retry for a process that exits before showing its window, and safe failure paths that never force-kill or click unknown dialogs.
-- Fix the crash when marking a target's background capability as passed or unsupported (profiles are now updated by id instead of a value comparison that could no longer match).
+- Fix the crash when marking a target's background capability as passed or unsupported; the single target is updated in place instead of replacing a value-compared entry.
 - Keep record and playback sessions mutually exclusive even when triggered from global hotkeys: F8 during playback and F9 during recording are ignored with a status message instead of starting a conflicting session.
-- Treat damaged local JSON as recoverable: a malformed `settings.json` shortcut no longer aborts startup, and a damaged legacy `profiles.json` falls back in memory without overwriting the file.
+- Treat damaged local JSON as recoverable: a malformed `settings.json` shortcut no longer aborts startup, and a damaged `target.json` falls back to defaults in memory without overwriting the file.
 - Skip macro files whose schema version is newer than this build supports and list them as skipped, instead of replaying data the program does not understand.
 - Log unexpected UI-thread exceptions to `%LOCALAPPDATA%\ZmboxZmx4Assist\crash.log`, release held keys/buttons, and keep the session running.
 - Replay clicks on the right monitor: absolute mouse coordinates are now normalised against the whole virtual desktop instead of only the primary screen.
@@ -25,6 +25,7 @@
 - Stop auditing the target window on every replayed event: the live guard now keeps its full answer for 100 ms and answers the per-event question with two cheap checks (handle alive, foreground owned), so a dense macro spends its time dispatching instead of querying the desktop; a closed window, a lost foreground or a background binding that stopped matching the profile still pauses immediately, and a layout change is caught within one interval.
 - Group the WPF shell under `Views/` and the macro list item under `ViewModels/`, so the project root shows one folder per layer instead of a dozen loose window files.
 - Run the playback timeline on a pool thread instead of the UI thread: the per-gap busy spin and the input calls no longer compete with the window's own rendering and input handling, and a late wake-up (GC pause, busy machine, slow frame) now shifts the timeline reference so the following recorded intervals stay intact instead of firing back-to-back — the long-session 断触 symptom; an emergency stop that lands while the timeline is shutting down is ignored instead of surfacing an exception.
+- Remove the retired multi-profile layer: the fixed 造梦盒子 target now lives only in `target.json`, the hidden profile selector and the unused `TargetProfile` model are gone, and an old `%LOCALAPPDATA%\GameMacro\profiles.json` is read once to seed the target instead of being maintained alongside macros.
 
 ## 1.0.4
 

@@ -86,15 +86,6 @@ public sealed record RecordedEvent
     public int WheelDelta { get; init; }
 }
 
-public sealed record TargetProfile
-{
-    public Guid Id { get; init; } = Guid.NewGuid();
-    public string Name { get; init; } = "新建启动器";
-    public string ExecutablePath { get; init; } = string.Empty;
-    public string WindowTitleContains { get; init; } = string.Empty;
-    public BackgroundCapability BackgroundCapability { get; init; } = BackgroundCapability.Unknown;
-}
-
 /// <summary>The single supported launcher target for this application.</summary>
 public sealed record ZmboxTargetSettings
 {
@@ -104,15 +95,6 @@ public sealed record ZmboxTargetSettings
     public string WindowTitleContains { get; init; } = "造梦盒子";
     public BackgroundCapability BackgroundCapability { get; init; } = BackgroundCapability.Unknown;
     public RestartSessionSettings RestartSession { get; init; } = new();
-
-    public TargetProfile ToCompatibilityProfile() => new()
-    {
-        Id = TargetProfileId,
-        Name = DisplayName,
-        ExecutablePath = ExecutablePath,
-        WindowTitleContains = WindowTitleContains,
-        BackgroundCapability = BackgroundCapability
-    };
 }
 
 /// <summary>
@@ -162,7 +144,7 @@ public sealed record WindowCandidate(
     public string LayoutLine => $"{Layout.WindowWidth} × {Layout.WindowHeight} · ({Layout.WindowX}, {Layout.WindowY})";
 }
 
-public sealed record ManualWindowBinding(WindowCandidate Window, bool MatchesSelectedProfile)
+public sealed record ManualWindowBinding(WindowCandidate Window, bool MatchesTarget)
 {
     public string Summary => $"{Window.WindowTitle} · {Window.ProcessName} (PID {Window.ProcessId})";
 }
@@ -217,7 +199,7 @@ public sealed record PlaybackRunResult(bool Succeeded, PlaybackStopResult? StopR
 public sealed record RestartSessionRequest(
     MacroDefinition PrimaryMacro,
     MacroDefinition PreparationMacro,
-    TargetProfile Profile,
+    ZmboxTargetSettings Target,
     PlaybackOptions PlaybackOptions,
     ManualWindowBinding InitialWindow,
     RestartSessionSettings Settings,
@@ -245,7 +227,5 @@ public sealed record HotkeySettings
 }
 
 [JsonSerializable(typeof(MacroDefinition))]
-[JsonSerializable(typeof(TargetProfile))]
-[JsonSerializable(typeof(List<TargetProfile>))]
 [JsonSerializable(typeof(HotkeySettings))]
 public partial class MacroJsonContext : JsonSerializerContext { }

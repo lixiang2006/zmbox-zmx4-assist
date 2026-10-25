@@ -60,56 +60,20 @@ public sealed class MacroDomainTests
     }
 
     [TestMethod]
-    public void Library_RoundTripsMacroAndProfile()
+    public void Library_RoundTripsMacroAndTargetSettings()
     {
         var root = Path.Combine(Path.GetTempPath(), "ZmboxZmx4AssistTests", Guid.NewGuid().ToString("N"));
         try
         {
             var library = new MacroLibraryService(root);
-            var profile = new TargetProfile { Name = "test profile" };
-            library.SaveProfiles(new[] { profile });
-            var macro = new MacroDefinition { Name = "hold W", TargetProfileId = profile.Id, Events = new[] { new RecordedEvent { Kind = InputEventKind.KeyDown, VirtualKey = 0x57 }, new RecordedEvent { OffsetMicroseconds = 2_000_000, Kind = InputEventKind.KeyUp, VirtualKey = 0x57 } } };
+            library.SaveZmboxTarget(new ZmboxTargetSettings { ExecutablePath = @"C:\Games\zmBox.exe", WindowTitleContains = "造梦盒子v1.8" });
+            var macro = new MacroDefinition { Name = "hold W", TargetProfileId = ZmboxTargetSettings.TargetProfileId, Events = new[] { new RecordedEvent { Kind = InputEventKind.KeyDown, VirtualKey = 0x57 }, new RecordedEvent { OffsetMicroseconds = 2_000_000, Kind = InputEventKind.KeyUp, VirtualKey = 0x57 } } };
             library.SaveMacro(macro);
 
-            Assert.AreEqual("test profile", library.LoadProfiles().Single().Name);
-            Assert.AreEqual(2, library.LoadMacros().Single().Events.Count);
-        }
-        finally { if (Directory.Exists(root)) Directory.Delete(root, true); }
-    }
-
-    [TestMethod]
-    public void Library_ReplacesLastRetiredLegacyHallPresetWithNeutralProfile()
-    {
-        var root = Path.Combine(Path.GetTempPath(), "ZmboxZmx4AssistTests", Guid.NewGuid().ToString("N"));
-        try
-        {
-            var library = new MacroLibraryService(root);
-            library.SaveProfiles(new[] { new TargetProfile { Name = "360 造梦西游4", BackgroundCapability = BackgroundCapability.Unknown } });
-
-            var profile = library.LoadProfiles().Single();
-            Assert.AreEqual("新建启动器", profile.Name);
-            Assert.AreEqual(BackgroundCapability.Unknown, profile.BackgroundCapability);
-        }
-        finally { if (Directory.Exists(root)) Directory.Delete(root, true); }
-    }
-
-    [TestMethod]
-    public void Library_RemovesTheRetiredLegacyHallPresetButPreservesOtherProfiles()
-    {
-        var root = Path.Combine(Path.GetTempPath(), "ZmboxZmx4AssistTests", Guid.NewGuid().ToString("N"));
-        try
-        {
-            var library = new MacroLibraryService(root);
-            library.SaveProfiles(new[]
-            {
-                new TargetProfile { Name = "360 造梦西游4", ExecutablePath = "C:\\legacy\\360Game.exe" },
-                new TargetProfile { Name = "造梦盒子", ExecutablePath = "C:\\launcher\\zmBox.exe", WindowTitleContains = "造梦盒子" }
-            });
-
-            var profiles = library.LoadProfiles();
-
-            Assert.AreEqual(1, profiles.Count);
-            Assert.AreEqual("造梦盒子", profiles.Single().Name);
+            Assert.AreEqual(@"C:\Games\zmBox.exe", library.LoadZmboxTarget().ExecutablePath);
+            var loaded = library.LoadMacros().Single();
+            Assert.AreEqual(2, loaded.Events.Count);
+            Assert.AreEqual(ZmboxTargetSettings.TargetProfileId, loaded.TargetProfileId);
         }
         finally { if (Directory.Exists(root)) Directory.Delete(root, true); }
     }
@@ -123,14 +87,18 @@ public sealed class MacroDomainTests
         {
             var old = new MacroLibraryService(legacy);
             old.SaveMacro(new MacroDefinition { Name = "旧宏", Events = new[] { new RecordedEvent { Kind = InputEventKind.KeyDown, VirtualKey = 0x57 } } });
-            old.SaveProfiles(new[] { new TargetProfile { Name = "造梦盒子", ExecutablePath = @"C:\\Games\\造梦盒子.exe", WindowTitleContains = "造梦盒子v1.8" } });
-            var legacyMacro = Directory.EnumerateFiles(old.MacrosDirectory, "*.json").Single();
+            File.WriteAllText(
+                Path.Combine(legacy, "profiles.json"),
+                JsonSerializer.Serialize(new[]
+                {
+                    new { ExecutablePath = @"C:\Games\造梦盒子.exe", WindowTitleContains = "造梦盒子v1.8", BackgroundCapability = BackgroundCapability.Unknown }
+                })); var legacyMacro = Directory.EnumerateFiles(old.MacrosDirectory, "*.json").Single();
             var before = File.ReadAllText(legacyMacro);
 
             var migrated = new MacroLibraryService(root, legacy);
 
             Assert.AreEqual("旧宏", migrated.LoadMacros().Single().Name);
-            Assert.AreEqual(@"C:\\Games\\造梦盒子.exe", migrated.LoadZmboxTarget().ExecutablePath);
+            Assert.AreEqual(@"C:\Games\造梦盒子.exe", migrated.LoadZmboxTarget().ExecutablePath);
             Assert.AreEqual(before, File.ReadAllText(legacyMacro));
         }
         finally

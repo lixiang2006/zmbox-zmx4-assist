@@ -8,11 +8,11 @@ namespace ZmboxZmx4Assist.Services;
 /// </summary>
 internal sealed class TargetWindowGuard(TargetWindowService targets) : IPlaybackTargetGuard
 {
-    public TargetReadiness Find(MacroDefinition macro, TargetProfile profile, PlaybackOptions options, ManualWindowBinding? manualWindow)
+    public TargetReadiness Find(MacroDefinition macro, ZmboxTargetSettings target, PlaybackOptions options, ManualWindowBinding? manualWindow)
     {
         if (manualWindow is { } binding)
         {
-            var direct = Check(binding.Window.Handle, macro, profile, options, binding);
+            var direct = Check(binding.Window.Handle, macro, target, options, binding);
             if (direct.IsReady) return direct;
 
             // Launchers can rebuild their top-level HWND while retaining the same
@@ -23,16 +23,16 @@ internal sealed class TargetWindowGuard(TargetWindowService targets) : IPlayback
             return Check(
                 rebound.Handle,
                 macro,
-                profile,
+                target,
                 options,
-                new ManualWindowBinding(rebound, binding.MatchesSelectedProfile));
+                new ManualWindowBinding(rebound, binding.MatchesTarget));
         }
-        var window = targets.Find(profile);
+        var window = targets.Find();
         if (window == IntPtr.Zero) return new TargetReadiness(IntPtr.Zero, false, "未找到匹配的目标窗口。");
-        return Check(window, macro, profile, options, null);
+        return Check(window, macro, target, options, null);
     }
 
-    public TargetReadiness Check(IntPtr window, MacroDefinition macro, TargetProfile profile, PlaybackOptions options, ManualWindowBinding? manualWindow)
+    public TargetReadiness Check(IntPtr window, MacroDefinition macro, ZmboxTargetSettings target, PlaybackOptions options, ManualWindowBinding? manualWindow)
     {
         if (manualWindow is { } binding)
         {
@@ -44,8 +44,8 @@ internal sealed class TargetWindowGuard(TargetWindowService targets) : IPlayback
                 var processIsRebuildingWindow = targets.IsProcessAlive(binding.Window.ProcessId);
                 return new TargetReadiness(IntPtr.Zero, false, validation, processIsRebuildingWindow);
             }
-            if (options.Mode == PlaybackMode.ExperimentalTargetWindow && !binding.MatchesSelectedProfile)
-                return new TargetReadiness(window, false, "手动选择的窗口不匹配当前配置档，不能使用后台窗口消息。");
+            if (options.Mode == PlaybackMode.ExperimentalTargetWindow && !binding.MatchesTarget)
+                return new TargetReadiness(window, false, "手动选择的窗口不匹配当前目标，不能使用后台窗口消息。");
         }
         if (!targets.IsWindow(window)) return new TargetReadiness(IntPtr.Zero, false, "目标窗口句柄已失效。");
         // Focus is checked before geometry. Switching to another foreground app must
@@ -54,8 +54,8 @@ internal sealed class TargetWindowGuard(TargetWindowService targets) : IPlayback
             return new TargetReadiness(window, false, "已切离锁定的造梦盒子窗口，前台输入已暂停。");
         var layout = targets.CompareLayout(window, macro.DisplayLayout);
         if (!layout.IsMatch) return new TargetReadiness(window, false, layout.Reason, layout.IsTransient);
-        if (options.Mode == PlaybackMode.ExperimentalTargetWindow && profile.BackgroundCapability == BackgroundCapability.Unsupported)
-            return new TargetReadiness(window, false, "此启动器已标记为不支持后台回放。");
+        if (options.Mode == PlaybackMode.ExperimentalTargetWindow && target.BackgroundCapability == BackgroundCapability.Unsupported)
+            return new TargetReadiness(window, false, "此目标已标记为不支持后台回放。");
         return new TargetReadiness(window, true, string.Empty);
     }
 }

@@ -16,9 +16,7 @@ public partial class MainWindow
 {
     private void LoadLibrary()
     {
-        _profiles.Clear();
         _targetSettings = _library.LoadZmboxTarget();
-        _profiles.Add(_targetSettings.ToCompatibilityProfile());
         var load = _library.LoadMacrosWithIssues();
         RebuildMacroItems(load.Macros);
         MacroIssueText.Visibility = load.Issues.Count == 0 ? Visibility.Collapsed : Visibility.Visible;
@@ -26,10 +24,8 @@ public partial class MainWindow
         _hotkeySettings = _library.LoadHotkeys();
         SyncHotkeyDrafts(_hotkeySettings);
         var hotkeyResult = _hotkeys.Configure(_hotkeySettings);
-        ProfilesCombo.ItemsSource = _profiles;
         MacrosList.ItemsSource = _macros;
         RestartPreparationMacroCombo.ItemsSource = _macros;
-        ProfilesCombo.SelectedIndex = _profiles.Count > 0 ? 0 : -1;
         if (_macros.Count > 0) MacrosList.SelectedIndex = 0;
         SyncRestartSessionSettings();
         if (!hotkeyResult.AllRegistered) SetStatus(hotkeyResult.Message);
@@ -39,10 +35,8 @@ public partial class MainWindow
     private void RebuildMacroItems(IEnumerable<MacroDefinition> macros)
     {
         _macros.Clear();
-        foreach (var macro in macros) _macros.Add(new MacroListItem(macro, ProfileNameFor(macro.TargetProfileId)));
+        foreach (var macro in macros) _macros.Add(new MacroListItem(macro));
     }
-
-    private string ProfileNameFor(Guid profileId) => ZmboxTargetSettings.DisplayName;
 
     private void MacrosList_SelectionChanged(object sender, SelectionChangedEventArgs e)
     {
@@ -105,7 +99,7 @@ public partial class MainWindow
         try
         {
             var renamed = _library.RenameMacro(item.Macro, item.DraftName);
-            item.Replace(renamed, ProfileNameFor(renamed.TargetProfileId));
+            item.Replace(renamed);
             SetStatus($"已将宏改名为“{renamed.Name}”。");
         }
         catch (Exception ex)

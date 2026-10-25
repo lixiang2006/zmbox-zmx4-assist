@@ -33,9 +33,9 @@ public sealed class GlobalInputRecorder : IDisposable
 
     public GlobalInputRecorder(TargetWindowService targets) => _targets = targets;
 
-    public bool Start(TargetProfile profile, HotkeySettings hotkeys)
+    public bool Start(HotkeySettings hotkeys)
     {
-        _target = _targets.Find(profile);
+        _target = _targets.Find();
         if (_target == IntPtr.Zero || !_targets.IsForeground(_target)) return false;
         _events.Clear();
         _mouseMoves.Reset();
@@ -53,11 +53,11 @@ public sealed class GlobalInputRecorder : IDisposable
         return IsRecording;
     }
 
-    public MacroDefinition Stop(string name, Guid profileId, DisplayLayout layout)
+    public MacroDefinition Stop(string name, DisplayLayout layout)
     {
         var normalized = MouseGestureProcessor.Normalize(_events);
         StopInternal("录制完成。");
-        return new MacroDefinition { Name = name, TargetProfileId = profileId, DisplayLayout = layout, Events = normalized };
+        return new MacroDefinition { Name = name, TargetProfileId = ZmboxTargetSettings.TargetProfileId, DisplayLayout = layout, Events = normalized };
     }
 
     public void Abort(string reason) { WasAborted = true; StopInternal(reason); }

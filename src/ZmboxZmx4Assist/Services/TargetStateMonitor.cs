@@ -41,14 +41,14 @@ internal sealed class TargetStateMonitor : IPlaybackTargetGuard
         _fullCheckIntervalTicks = fullCheckIntervalTicks < 0 ? DefaultFullCheckIntervalTicks : fullCheckIntervalTicks;
     }
 
-    public TargetReadiness Find(MacroDefinition macro, TargetProfile profile, PlaybackOptions options, ManualWindowBinding? manualWindow)
+    public TargetReadiness Find(MacroDefinition macro, ZmboxTargetSettings target, PlaybackOptions options, ManualWindowBinding? manualWindow)
     {
-        var result = _guard.Find(macro, profile, options, manualWindow);
+        var result = _guard.Find(macro, target, options, manualWindow);
         Remember(result);
         return result;
     }
 
-    public TargetReadiness Check(IntPtr window, MacroDefinition macro, TargetProfile profile, PlaybackOptions options, ManualWindowBinding? manualWindow)
+    public TargetReadiness Check(IntPtr window, MacroDefinition macro, ZmboxTargetSettings target, PlaybackOptions options, ManualWindowBinding? manualWindow)
     {
         var cheapFailure = CheapFailure(window, options, manualWindow);
         if (cheapFailure is not null) return new TargetReadiness(window, false, cheapFailure);
@@ -56,7 +56,7 @@ internal sealed class TargetStateMonitor : IPlaybackTargetGuard
         if (_cached is { IsReady: true } cached && window == _cachedWindow && _timestamp() - _cachedAt < _fullCheckIntervalTicks)
             return cached;
 
-        var result = _guard.Check(window, macro, profile, options, manualWindow);
+        var result = _guard.Check(window, macro, target, options, manualWindow);
         Remember(result);
         return result;
     }
@@ -69,7 +69,7 @@ internal sealed class TargetStateMonitor : IPlaybackTargetGuard
         if (!_probe.IsWindow(window)) return "目标窗口句柄已失效。";
         if (options.Mode == PlaybackMode.ForegroundSystemInput && !_probe.IsForeground(window))
             return "已切离锁定的造梦盒子窗口，前台输入已暂停。";
-        if (options.Mode == PlaybackMode.ExperimentalTargetWindow && manualWindow is { MatchesSelectedProfile: false })
+        if (options.Mode == PlaybackMode.ExperimentalTargetWindow && manualWindow is { MatchesTarget: false })
             return "手动选择的窗口不匹配当前配置档，不能使用后台窗口消息。";
         return null;
     }

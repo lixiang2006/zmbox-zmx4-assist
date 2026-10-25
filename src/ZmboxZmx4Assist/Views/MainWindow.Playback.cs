@@ -2,7 +2,6 @@ using System.Windows;
 using System.Windows.Controls;
 using ZmboxZmx4Assist.Domain;
 using ZmboxZmx4Assist.Services;
-using WpfMessageBox = System.Windows.MessageBox;
 
 namespace ZmboxZmx4Assist.Views;
 
@@ -32,17 +31,10 @@ public partial class MainWindow
             return;
         }
         if (SelectedMacro is not { } macro) { SetStatus("请选择要回放的宏。"); return; }
-        var profile = SelectedProfile;
         if (!int.TryParse(RepeatText.Text, out var repeats) || repeats < 1) { SetStatus("循环次数必须是正整数。"); return; }
         if (!int.TryParse(InterIterationDelayText.Text, out var delaySeconds) || delaySeconds is < 0 or > 120) { SetStatus("每轮等待必须是 0 到 120 秒之间的整数。"); return; }
         if (!int.TryParse(CooldownEveryIterationsText.Text, out var cooldownEvery) || cooldownEvery is < 1 or > 1000) { SetStatus("周期冷却轮数必须是 1 到 1000 之间的整数。"); return; }
         if (!int.TryParse(CooldownSecondsText.Text, out var cooldownSeconds) || cooldownSeconds is < 0 or > 900) { SetStatus("周期冷却等待必须是 0 到 900 秒之间的整数。"); return; }
-        if (macro.TargetProfileId != profile.Id)
-        {
-            var original = ProfileNameFor(macro.TargetProfileId);
-            var confirmation = WpfMessageBox.Show($"此宏录制于“{original}”，当前将回放到“{profile.Name}”。\n\n坐标和窗口行为可能不同。是否继续？", "跨配置档回放", MessageBoxButton.YesNo, MessageBoxImage.Warning, MessageBoxResult.No);
-            if (confirmation != MessageBoxResult.Yes) { SetStatus("已取消跨配置档回放。"); return; }
-        }
         var mode = CurrentPlaybackMode;
         try
         {
@@ -53,11 +45,10 @@ public partial class MainWindow
                 ClearManualWindow(false);
             }
             if (_manualWindow is null && !await CapturePlaybackWindowAsync()) return;
-            profile = SelectedProfile;
             var selectedWindow = _manualWindow!;
-            if (mode == PlaybackMode.ExperimentalTargetWindow && !selectedWindow.MatchesSelectedProfile)
+            if (mode == PlaybackMode.ExperimentalTargetWindow && !selectedWindow.MatchesTarget)
             {
-                SetStatus("手动选择的窗口不匹配当前配置档，不能使用后台窗口消息。");
+                SetStatus("手动选择的窗口不匹配当前目标，不能使用后台窗口消息。");
                 return;
             }
             if (mode == PlaybackMode.ForegroundSystemInput && !_targets.TryActivate(selectedWindow.Window))
@@ -69,12 +60,12 @@ public partial class MainWindow
             if (_targetSettings.RestartSession.Enabled)
             {
                 if (!PersistRestartSessionSettingsIfValid()) return;
-                if (CreateRestartSessionRequest(macro, profile, options, selectedWindow) is not { } request) return;
+                if (CreateRestartSessionRequest(macro, _targetSettings, options, selectedWindow) is not { } request) return;
                 await _restartSession.PlayAsync(request);
             }
             else
             {
-                await _player.PlayAsync(macro, profile, options, selectedWindow);
+                await _player.PlayAsync(macro, _targetSettings, options, selectedWindow);
             }
         }
         catch (Exception ex) { SetStatus(ex.Message); }

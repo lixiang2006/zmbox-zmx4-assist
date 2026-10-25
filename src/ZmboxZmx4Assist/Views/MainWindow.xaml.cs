@@ -26,7 +26,6 @@ public partial class MainWindow : System.Windows.Window
     private readonly GlobalHotkeyService _hotkeys;
     private readonly RecordingIndicatorWindow _recordingIndicator = new();
     private readonly ObservableCollection<MacroListItem> _macros = [];
-    private readonly ObservableCollection<TargetProfile> _profiles = [];
     private ZmboxTargetSettings _targetSettings = new();
     private HotkeySettings _hotkeySettings = new();
     private HotkeyBinding _recordHotkeyDraft = HotkeyBinding.RecordDefault;
@@ -79,15 +78,13 @@ public partial class MainWindow : System.Windows.Window
         _errorNotify = errorNotifier;
     }
 
-    // This is a single-target application. Do not derive the active target from the
-    // hidden legacy ComboBox: collection notifications could otherwise clear a lock.
-    private TargetProfile SelectedProfile => _targetSettings.ToCompatibilityProfile();
     private MacroListItem? SelectedMacroItem => MacrosList.SelectedItem as MacroListItem;
     private MacroDefinition? SelectedMacro => SelectedMacroItem?.Macro;
 
     private void RefreshAll()
     {
         RefreshMacroSummary();
+        RefreshTargetTexts();
         RefreshBackgroundState();
         RefreshRestartSessionUi();
         RefreshPreflight();
@@ -101,18 +98,16 @@ public partial class MainWindow : System.Windows.Window
         var busy = _recorder.IsRecording || _player.IsRunning || _restartSession.IsRunning;
         RecordButton.IsEnabled = !_player.IsRunning && !_restartSession.IsRunning;
         RecordButton.Content = _recorder.IsRecording ? $"结束并保存 ({_hotkeySettings.RecordHotkey.DisplayText})" : $"开始录制 ({_hotkeySettings.RecordHotkey.DisplayText})";
-        PlayButton.IsEnabled = !busy && SelectedMacro is not null && SelectedProfile is not null;
+        PlayButton.IsEnabled = !busy && SelectedMacro is not null;
         PlayButton.Content = $"开始回放 ({_hotkeySettings.PlayHotkey.DisplayText})";
         StopButton.Content = $"紧急停止 ({_hotkeySettings.EmergencyHotkey.DisplayText})";
         DeleteMacroButton.IsEnabled = !busy && SelectedMacro is not null;
-        CloneProfileButton.IsEnabled = !busy;
-        SaveProfileButton.IsEnabled = !busy;
         SaveHotkeysButton.IsEnabled = !busy;
         RecordHotkeyText.IsEnabled = !busy;
         PlayHotkeyText.IsEnabled = !busy;
         EmergencyHotkeyText.IsEnabled = !busy;
         CheckTargetButton.IsEnabled = !busy;
-        SelectWindowButton.IsEnabled = !busy && SelectedProfile is not null;
+        SelectWindowButton.IsEnabled = !busy;
         BackgroundPassedButton.IsEnabled = !busy;
         BackgroundFailedButton.IsEnabled = !busy;
         RestartSessionEnabledCheck.IsEnabled = !busy;

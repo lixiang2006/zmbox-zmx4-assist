@@ -14,7 +14,6 @@ public sealed class MacroLibraryService
     };
     private readonly string _root;
     private readonly string _macros;
-    private readonly string _profilesPath;
     private readonly string _settingsPath;
     private readonly string _targetPath;
     private readonly string? _legacyRoot;
@@ -25,7 +24,6 @@ public sealed class MacroLibraryService
         _root = root ?? Path.Combine(local, "ZmboxZmx4Assist");
         _legacyRoot = legacyRoot ?? (root is null ? Path.Combine(local, "GameMacro") : null);
         _macros = Path.Combine(_root, "macros");
-        _profilesPath = Path.Combine(_root, "profiles.json");
         _settingsPath = Path.Combine(_root, "settings.json");
         _targetPath = Path.Combine(_root, "target.json");
         Directory.CreateDirectory(_macros);
@@ -51,38 +49,6 @@ public sealed class MacroLibraryService
     }
 
     public void SaveZmboxTarget(ZmboxTargetSettings settings) => WriteJsonAtomically(_targetPath, settings);
-
-    public IReadOnlyList<TargetProfile> LoadProfiles()
-    {
-        if (!File.Exists(_profilesPath))
-        {
-            var defaults = new[] { new TargetProfile() };
-            SaveProfiles(defaults);
-            return defaults;
-        }
-        List<TargetProfile> profiles;
-        try
-        {
-            profiles = JsonSerializer.Deserialize<List<TargetProfile>>(File.ReadAllText(_profilesPath), JsonOptions) ?? [];
-        }
-        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or JsonException or NotSupportedException)
-        {
-            // profiles.json is a legacy file and the single supported target lives in target.json.
-            // A damaged legacy file must never block startup; keep it on disk for diagnosis
-            // instead of overwriting it with defaults.
-            return [new TargetProfile()];
-        }
-        // 360 Game Hall has no useful background-input path here. Retire only the historical
-        // preset by its original name; macros are deliberately not touched and remain loadable.
-        var migrated = profiles
-            .Where(profile => !string.Equals(profile.Name, "360 造梦西游4", StringComparison.Ordinal))
-            .ToArray();
-        if (migrated.Length == 0) migrated = [new TargetProfile()];
-        if (!profiles.SequenceEqual(migrated)) SaveProfiles(migrated);
-        return migrated;
-    }
-
-    public void SaveProfiles(IEnumerable<TargetProfile> profiles) => WriteJsonAtomically(_profilesPath, profiles);
 
     public HotkeySettings LoadHotkeys()
     {
@@ -121,7 +87,13 @@ public sealed class MacroLibraryService
                 // iteration; a damaged file is reported and skipped like any other load failure.
                 if (MacroValidator.Validate(macro) is { } validationError) throw new JsonException($"宏数据无效：{validationError}");
                 // Upgrade older files in memory: the next save then writes the compact current form.
-                macros.Add(macro with { SchemaVersion = MacroDefinition.CurrentSchemaVersion });
+                // Macros from the retired multi-profile builds are normalized to the single target
+                // so the playback path never has to ask which profile a macro belongs to.
+                macros.Add(macro with
+                {
+                    SchemaVersion = MacroDefinition.CurrentSchemaVersion,
+                    TargetProfileId = ZmboxTargetSettings.TargetProfileId
+                });
             }
             catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or JsonException or NotSupportedException)
             {
@@ -194,23 +166,44 @@ public sealed class MacroLibraryService
         var legacyProfiles = Path.Combine(_legacyRoot, "profiles.json");
         try
         {
-            var profiles = File.Exists(legacyProfiles)
-                ? JsonSerializer.Deserialize<List<TargetProfile>>(File.ReadAllText(legacyProfiles), JsonOptions) ?? []
-                : [];
-            var zmbox = profiles.FirstOrDefault(profile =>
-                profile.WindowTitleContains.Contains("造梦盒子", StringComparison.OrdinalIgnoreCase) ||
-                Path.GetFileNameWithoutExtension(profile.ExecutablePath).Contains("造梦盒子", StringComparison.OrdinalIgnoreCase));
-            if (zmbox is not null)
+            if (!File.Exists(legacyProfiles)) return;
+            using var document = JsonDocument.Parse(File.ReadAllText(legacyProfiles));
+            if (document.RootElement.ValueKind != JsonValueKind.Array) return;
+            foreach (var profile in document.RootElement.EnumerateArray())
+            {
+                var executablePath = ReadString(profile, "ExecutablePath");
+                var title = ReadString(profile, "WindowTitleContains");
+                var isZmbox = title.Contains("造梦盒子", StringComparison.OrdinalIgnoreCase) ||
+                              Path.GetFileNameWithoutExtension(executablePath).Contains("造梦盒子", StringComparison.OrdinalIgnoreCase);
+                if (!isZmbox) continue;
                 SaveZmboxTarget(new ZmboxTargetSettings
                 {
-                    ExecutablePath = zmbox.ExecutablePath,
-                    WindowTitleContains = string.IsNullOrWhiteSpace(zmbox.WindowTitleContains) ? "造梦盒子" : zmbox.WindowTitleContains,
-                    BackgroundCapability = zmbox.BackgroundCapability
+                    ExecutablePath = executablePath,
+                    WindowTitleContains = string.IsNullOrWhiteSpace(title) ? "造梦盒子" : title,
+                    BackgroundCapability = ReadBackgroundCapability(profile)
                 });
+                return;
+            }
         }
         catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or JsonException or NotSupportedException)
         {
             // The legacy files stay untouched. The new target starts with safe defaults.
         }
+    }
+
+    private static string ReadString(JsonElement element, string property) =>
+        element.TryGetProperty(property, out var value) && value.ValueKind == JsonValueKind.String
+            ? value.GetString() ?? string.Empty
+            : string.Empty;
+
+    private static BackgroundCapability ReadBackgroundCapability(JsonElement profile)
+    {
+        if (!profile.TryGetProperty("BackgroundCapability", out var value)) return BackgroundCapability.Unknown;
+        return value.ValueKind switch
+        {
+            JsonValueKind.Number when value.TryGetInt32(out var number) && Enum.IsDefined(typeof(BackgroundCapability), number) => (BackgroundCapability)number,
+            JsonValueKind.String when Enum.TryParse<BackgroundCapability>(value.GetString(), true, out var parsed) => parsed,
+            _ => BackgroundCapability.Unknown
+        };
     }
 }

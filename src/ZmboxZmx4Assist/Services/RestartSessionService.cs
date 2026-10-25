@@ -13,7 +13,7 @@ public interface IPlaybackRoundExecutor
     bool IsRunning { get; }
     Task<PlaybackRunResult> PlaySingleIterationAsync(
         MacroDefinition macro,
-        TargetProfile profile,
+        ZmboxTargetSettings target,
         PlaybackOptions options,
         ManualWindowBinding manualWindow,
         CancellationToken cancellationToken);
@@ -156,7 +156,7 @@ public sealed class RestartSessionService
             return "主宏和准备宏都必须包含录制时的窗口布局。";
         if (!DisplayLayoutComparer.Compare(request.PrimaryMacro.DisplayLayout, request.PreparationMacro.DisplayLayout).IsMatch)
             return "准备宏的录制布局与主宏不兼容。";
-        if (!request.InitialWindow.MatchesSelectedProfile ||
+        if (!request.InitialWindow.MatchesTarget ||
             !string.Equals(request.InitialWindow.Window.ProcessName, "造梦盒子", StringComparison.OrdinalIgnoreCase) ||
             !request.InitialWindow.Window.WindowTitle.Contains("造梦盒子", StringComparison.OrdinalIgnoreCase))
             return "自动重启只能用于已锁定的造梦盒子窗口。";
@@ -165,7 +165,7 @@ public sealed class RestartSessionService
             !File.Exists(request.ExecutablePath))
             return "未找到可验证的造梦盒子 EXE 路径，不能安全自动重启。请先锁定一次可读取路径的造梦盒子窗口。";
         if (request.PlaybackOptions.Mode == PlaybackMode.ExperimentalTargetWindow &&
-            request.Profile.BackgroundCapability != BackgroundCapability.Verified)
+            request.Target.BackgroundCapability != BackgroundCapability.Verified)
             return "后台窗口消息尚未验证，自动重启会话不能启用后台通道。";
         return null;
     }
@@ -242,7 +242,7 @@ public sealed class RestartSessionService
     {
         var run = _roundExecutor.PlaySingleIterationAsync(
             macro,
-            request.Profile,
+            request.Target,
             request.PlaybackOptions,
             binding,
             token);

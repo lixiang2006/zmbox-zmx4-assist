@@ -8,6 +8,11 @@ only accepts a foreground window whose process name and title identify 造梦盒
 no launcher code or game resource is loaded, modified, injected, or
 redistributed.
 
+There is exactly one supported target, described by `ZmboxTargetSettings` and
+stored in `target.json`; macros carry its fixed `TargetProfileId` so a macro
+recorded against a different target is still recognisable. Legacy multi-profile
+data is only a migration source.
+
 All WPF windows live under `src/ZmboxZmx4Assist/Views/`, and the macro list item
 view-model under `ViewModels/`. The shell is split by feature: `MainWindow.xaml.cs`
 holds only service composition, shared window state and the
@@ -24,7 +29,7 @@ for the live window). In production that guard is wrapped by
 `TargetStateMonitor`, which keeps the expensive full answer — process identity,
 layout, DPI, foreground — for one 100 ms interval and answers the per-event
 question from a cheap handle/foreground probe; a dead handle, a lost foreground
-or a background binding that no longer matches the profile still pauses
+or a background binding that no longer matches the target still pauses
 immediately. The golden playback tests drive the real timeline through both
 seams, so the dispatch sequence is pinned without touching a desktop.
 

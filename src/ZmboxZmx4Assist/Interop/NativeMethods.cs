@@ -99,41 +99,6 @@ internal static class NativeMethods
         return true;
     }
 
-    internal static IntPtr FindWindow(TargetProfile profile)
-    {
-        var executable = Path.GetFullPath(profile.ExecutablePath);
-        var executableName = Path.GetFileNameWithoutExtension(executable);
-        IntPtr found = IntPtr.Zero;
-        EnumWindows((candidate, _) =>
-        {
-            if (!IsWindowVisible(candidate)) return true;
-            GetWindowThreadProcessId(candidate, out var processId);
-            try
-            {
-                using var process = Process.GetProcessById((int)processId);
-                var title = new System.Text.StringBuilder(512);
-                GetWindowText(candidate, title, title.Capacity);
-                if (!title.ToString().Contains(profile.WindowTitleContains, StringComparison.OrdinalIgnoreCase)) return true;
-
-                // Some runtimes (including the updated AIR launcher) deny MainModule access
-                // to normal-user processes. Keep exact-path matching whenever it is available;
-                // only then fall back to the configured executable name plus the title match above.
-                string? actualExecutable = null;
-                try { actualExecutable = process.MainModule?.FileName; }
-                catch (Win32Exception) { }
-                var executableMatches = !string.IsNullOrWhiteSpace(actualExecutable)
-                    ? string.Equals(Path.GetFullPath(actualExecutable), executable, StringComparison.OrdinalIgnoreCase)
-                    : string.Equals(process.ProcessName, executableName, StringComparison.OrdinalIgnoreCase);
-                if (!executableMatches) return true;
-
-                found = candidate;
-                return false;
-            }
-            catch { return true; }
-        }, IntPtr.Zero);
-        return found;
-    }
-
     internal static IReadOnlyList<WindowCandidate> ListVisibleTopLevelWindows()
     {
         var windows = new List<WindowCandidate>();

@@ -55,26 +55,6 @@ public sealed class PersistenceRobustnessTests
     }
 
     [TestMethod]
-    public void Library_LoadProfiles_CorruptFileFallsBackToSingleDefaultWithoutOverwriting()
-    {
-        var root = CreateTempRoot();
-        try
-        {
-            var service = new MacroLibraryService(root);
-            var path = Path.Combine(root, "profiles.json");
-            const string corrupt = "{ this is not json }";
-            File.WriteAllText(path, corrupt);
-
-            var profiles = service.LoadProfiles();
-
-            Assert.AreEqual(1, profiles.Count);
-            Assert.AreEqual(new TargetProfile().Name, profiles[0].Name);
-            Assert.AreEqual(corrupt, File.ReadAllText(path));
-        }
-        finally { DeleteTempRoot(root); }
-    }
-
-    [TestMethod]
     public void Library_LoadMacrosWithIssues_SkipsMacroWrittenByNewerSchemaVersion()
     {
         var root = CreateTempRoot();

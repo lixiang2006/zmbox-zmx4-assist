@@ -137,7 +137,7 @@ public partial class MainWindow
 
     private RestartSessionRequest? CreateRestartSessionRequest(
         MacroDefinition primaryMacro,
-        TargetProfile profile,
+        ZmboxTargetSettings target,
         PlaybackOptions options,
         ManualWindowBinding selectedWindow)
     {
@@ -154,11 +154,11 @@ public partial class MainWindow
         var request = new RestartSessionRequest(
             primaryMacro,
             preparation,
-            profile,
+            target,
             options,
             selectedWindow,
             settings,
-            profile.ExecutablePath);
+            target.ExecutablePath);
         if (RestartSessionService.ValidateRequest(request) is { } validation)
         {
             SetStatus(validation);

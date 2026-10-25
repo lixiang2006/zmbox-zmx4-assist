@@ -19,7 +19,7 @@ public sealed class ZmboxProcessLifecycle : IZmboxProcessLifecycle
         TimeSpan timeout,
         CancellationToken cancellationToken)
     {
-        if (!lockedWindow.MatchesSelectedProfile || !_targets.IsZmboxWindow(lockedWindow.Window))
+        if (!lockedWindow.MatchesTarget || !_targets.IsZmboxWindow(lockedWindow.Window))
             return new ProcessCloseResult(false, "当前锁定的窗口不是可重启的造梦盒子实例。");
         if (!_targets.TryRequestNormalClose(lockedWindow.Window, out var error))
             return new ProcessCloseResult(false, error);

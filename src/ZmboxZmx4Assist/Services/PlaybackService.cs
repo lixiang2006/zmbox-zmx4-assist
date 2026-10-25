@@ -34,14 +34,14 @@ public sealed class PlaybackService : IPlaybackRoundExecutor
     public event Action? StateChanged;
     public event Action<PlaybackStopResult>? PlaybackStopped;
 
-    public async Task PlayAsync(MacroDefinition macro, TargetProfile profile, PlaybackOptions options, ManualWindowBinding? manualWindow = null)
+    public async Task PlayAsync(MacroDefinition macro, ZmboxTargetSettings target, PlaybackOptions options, ManualWindowBinding? manualWindow = null)
     {
-        await PlayCoreAsync(macro, profile, options, manualWindow, CancellationToken.None, reportStop: true, reportCompletion: true);
+        await PlayCoreAsync(macro, target, options, manualWindow, CancellationToken.None, reportStop: true, reportCompletion: true);
     }
 
     public async Task<PlaybackRunResult> PlaySingleIterationAsync(
         MacroDefinition macro,
-        TargetProfile profile,
+        ZmboxTargetSettings target,
         PlaybackOptions options,
         ManualWindowBinding manualWindow,
         CancellationToken cancellationToken)
@@ -54,7 +54,7 @@ public sealed class PlaybackService : IPlaybackRoundExecutor
             CooldownEveryIterations = 1,
             CooldownSeconds = 0
         };
-        return await PlayCoreAsync(macro, profile, singleIteration, manualWindow, cancellationToken, reportStop: false, reportCompletion: false);
+        return await PlayCoreAsync(macro, target, singleIteration, manualWindow, cancellationToken, reportStop: false, reportCompletion: false);
     }
 
     /// <summary>
@@ -63,7 +63,7 @@ public sealed class PlaybackService : IPlaybackRoundExecutor
     /// </summary>
     private Task<PlaybackRunResult> PlayCoreAsync(
         MacroDefinition macro,
-        TargetProfile profile,
+        ZmboxTargetSettings target,
         PlaybackOptions options,
         ManualWindowBinding? manualWindow,
         CancellationToken cancellationToken,
@@ -86,12 +86,12 @@ public sealed class PlaybackService : IPlaybackRoundExecutor
         // The timeline busy-spins the last milliseconds of every gap and then calls SendInput. On
         // the Dispatcher thread that starved the window's own rendering and input handling, which
         // is what made long sessions look stuck; the status/state events marshal themselves back.
-        return Task.Run(() => RunCoreAsync(macro, profile, options, manualWindow, reportStop, reportCompletion));
+        return Task.Run(() => RunCoreAsync(macro, target, options, manualWindow, reportStop, reportCompletion));
     }
 
     private async Task<PlaybackRunResult> RunCoreAsync(
         MacroDefinition macro,
-        TargetProfile profile,
+        ZmboxTargetSettings target,
         PlaybackOptions options,
         ManualWindowBinding? manualWindow,
         bool reportStop,
@@ -103,7 +103,7 @@ public sealed class PlaybackService : IPlaybackRoundExecutor
         try
         {
             token.ThrowIfCancellationRequested();
-            window = EnsureTargetReady(macro, profile, options, manualWindow);
+            window = EnsureTargetReady(macro, target, options, manualWindow);
             // 后台通道靠窗口消息投递；启动前先试一次，把权限/完整性拦截说清楚，而不是在宏跑到一半时中断。
             if (options.Mode == PlaybackMode.ExperimentalTargetWindow && !_input.TryProbeBackgroundChannel(window, out var probeFailure))
                 throw new InvalidOperationException(probeFailure);
@@ -112,7 +112,7 @@ public sealed class PlaybackService : IPlaybackRoundExecutor
             {
                 iteration++;
                 StatusChanged?.Invoke($"正在回放第 {iteration} 轮…");
-                window = await PlayOnceAsync(macro.Events, window, macro, profile, options, manualWindow, token);
+                window = await PlayOnceAsync(macro.Events, window, macro, target, options, manualWindow, token);
                 ReleaseAll(window, options.Mode);
                 var hasNextIteration = options.InfiniteLoop || iteration < Math.Max(1, options.RepeatCount);
                 if (hasNextIteration && options.InterIterationDelaySeconds > 0)
@@ -120,7 +120,7 @@ public sealed class PlaybackService : IPlaybackRoundExecutor
                 if (options.ShouldCooldownAfter(iteration, hasNextIteration))
                 {
                     await WaitCooldownAsync(iteration, options.CooldownSeconds, token);
-                    window = await RecoverFoundWindowAsync(macro, profile, options, manualWindow, token);
+                    window = await RecoverFoundWindowAsync(macro, target, options, manualWindow, token);
                 }
             }
             while (options.InfiniteLoop || iteration < Math.Max(1, options.RepeatCount));
@@ -188,21 +188,21 @@ public sealed class PlaybackService : IPlaybackRoundExecutor
         StatusChanged?.Invoke("周期冷却完成，正在重新检查目标窗口…");
     }
 
-    private IntPtr EnsureTargetReady(MacroDefinition macro, TargetProfile profile, PlaybackOptions options, ManualWindowBinding? manualWindow)
+    private IntPtr EnsureTargetReady(MacroDefinition macro, ZmboxTargetSettings target, PlaybackOptions options, ManualWindowBinding? manualWindow)
     {
-        var readiness = _targetGuard.Find(macro, profile, options, manualWindow);
+        var readiness = _targetGuard.Find(macro, target, options, manualWindow);
         if (!readiness.IsReady) throw new InvalidOperationException(readiness.Reason);
         return readiness.Window;
     }
 
-    private async Task<IntPtr> RecoverFoundWindowAsync(MacroDefinition macro, TargetProfile profile, PlaybackOptions options, ManualWindowBinding? manualWindow, CancellationToken token)
+    private async Task<IntPtr> RecoverFoundWindowAsync(MacroDefinition macro, ZmboxTargetSettings target, PlaybackOptions options, ManualWindowBinding? manualWindow, CancellationToken token)
     {
-        var readiness = _targetGuard.Find(macro, profile, options, manualWindow);
+        var readiness = _targetGuard.Find(macro, target, options, manualWindow);
         if (readiness.IsReady) return readiness.Window;
-        return (await RecoverWindowAsync(macro, profile, options, manualWindow, readiness.Reason, HeldInputState.Empty, token)).Window;
+        return (await RecoverWindowAsync(macro, target, options, manualWindow, readiness.Reason, HeldInputState.Empty, token)).Window;
     }
 
-    private async Task<IntPtr> PlayOnceAsync(IReadOnlyList<RecordedEvent> events, IntPtr window, MacroDefinition macro, TargetProfile profile, PlaybackOptions options, ManualWindowBinding? manualWindow, CancellationToken token)
+    private async Task<IntPtr> PlayOnceAsync(IReadOnlyList<RecordedEvent> events, IntPtr window, MacroDefinition macro, ZmboxTargetSettings target, PlaybackOptions options, ManualWindowBinding? manualWindow, CancellationToken token)
     {
         var started = Stopwatch.GetTimestamp();
         // The virtual desktop only changes when the display layout does, which playback already
@@ -211,7 +211,7 @@ public sealed class PlaybackService : IPlaybackRoundExecutor
         foreach (var e in events)
         {
             token.ThrowIfCancellationRequested();
-            var beforeWait = await RecoverCurrentWindowIfNeededAsync(window, macro, profile, options, manualWindow, token);
+            var beforeWait = await RecoverCurrentWindowIfNeededAsync(window, macro, target, options, manualWindow, token);
             window = beforeWait.Window;
             started += beforeWait.PauseTicks;
 
@@ -219,7 +219,7 @@ public sealed class PlaybackService : IPlaybackRoundExecutor
             while (true)
             {
                 await WaitUntilAsync(started, dueTicks, token);
-                var beforeDispatch = await RecoverCurrentWindowIfNeededAsync(window, macro, profile, options, manualWindow, token);
+                var beforeDispatch = await RecoverCurrentWindowIfNeededAsync(window, macro, target, options, manualWindow, token);
                 window = beforeDispatch.Window;
                 if (beforeDispatch.PauseTicks == 0) break;
                 started += beforeDispatch.PauseTicks;
@@ -234,17 +234,17 @@ public sealed class PlaybackService : IPlaybackRoundExecutor
         return window;
     }
 
-    private async Task<RecoveryResult> RecoverCurrentWindowIfNeededAsync(IntPtr window, MacroDefinition macro, TargetProfile profile, PlaybackOptions options, ManualWindowBinding? manualWindow, CancellationToken token)
+    private async Task<RecoveryResult> RecoverCurrentWindowIfNeededAsync(IntPtr window, MacroDefinition macro, ZmboxTargetSettings target, PlaybackOptions options, ManualWindowBinding? manualWindow, CancellationToken token)
     {
-        var readiness = _targetGuard.Check(window, macro, profile, options, manualWindow);
+        var readiness = _targetGuard.Check(window, macro, target, options, manualWindow);
         if (readiness.IsReady) return new RecoveryResult(window, 0);
 
         var held = SnapshotHeldInputs();
         ReleaseAll(window, options.Mode);
-        return await RecoverWindowAsync(macro, profile, options, manualWindow, readiness.Reason, held, token);
+        return await RecoverWindowAsync(macro, target, options, manualWindow, readiness.Reason, held, token);
     }
 
-    private async Task<RecoveryResult> RecoverWindowAsync(MacroDefinition macro, TargetProfile profile, PlaybackOptions options, ManualWindowBinding? manualWindow, string initialReason, HeldInputState held, CancellationToken token)
+    private async Task<RecoveryResult> RecoverWindowAsync(MacroDefinition macro, ZmboxTargetSettings target, PlaybackOptions options, ManualWindowBinding? manualWindow, string initialReason, HeldInputState held, CancellationToken token)
     {
         var started = Stopwatch.GetTimestamp();
         var latestReason = initialReason;
@@ -255,7 +255,7 @@ public sealed class PlaybackService : IPlaybackRoundExecutor
         while (true)
         {
             token.ThrowIfCancellationRequested();
-            var readiness = _targetGuard.Find(macro, profile, options, manualWindow);
+            var readiness = _targetGuard.Find(macro, target, options, manualWindow);
             if (readiness.IsReady)
             {
                 RestoreHeldInputs(readiness.Window, options.Mode, held);

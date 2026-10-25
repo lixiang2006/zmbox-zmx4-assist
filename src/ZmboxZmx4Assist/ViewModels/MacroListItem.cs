@@ -7,14 +7,12 @@ namespace ZmboxZmx4Assist.ViewModels;
 public sealed class MacroListItem : INotifyPropertyChanged
 {
     private MacroDefinition _macro;
-    private string _profileName;
     private string _draftName;
     private bool _isRenaming;
 
-    public MacroListItem(MacroDefinition macro, string profileName)
+    public MacroListItem(MacroDefinition macro)
     {
         _macro = macro;
-        _profileName = profileName;
         _draftName = macro.Name;
     }
 
@@ -22,14 +20,13 @@ public sealed class MacroListItem : INotifyPropertyChanged
     public string Name => _macro.Name;
     public string DraftName { get => _draftName; set { _draftName = value; OnPropertyChanged(); } }
     public bool IsRenaming { get => _isRenaming; private set { _isRenaming = value; OnPropertyChanged(); } }
-    public string DetailLine => $"{_profileName}  ·  {_macro.Events.Count} 个事件  ·  {FormatDuration(_macro.Events)}";
+    public string DetailLine => $"{ZmboxTargetSettings.DisplayName}  ·  {_macro.Events.Count} 个事件  ·  {FormatDuration(_macro.Events)}";
 
     public void BeginRename() { DraftName = _macro.Name; IsRenaming = true; }
     public void CancelRename() { DraftName = _macro.Name; IsRenaming = false; }
-    public void Replace(MacroDefinition macro, string profileName)
+    public void Replace(MacroDefinition macro)
     {
         _macro = macro;
-        _profileName = profileName;
         _draftName = macro.Name;
         IsRenaming = false;
         OnPropertyChanged(nameof(Macro));

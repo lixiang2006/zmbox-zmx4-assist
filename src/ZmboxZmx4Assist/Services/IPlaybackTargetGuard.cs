@@ -12,8 +12,8 @@ public sealed record TargetReadiness(IntPtr Window, bool IsReady, string Reason,
 public interface IPlaybackTargetGuard
 {
     /// <summary>Resolves the window to play into, rebinding inside the locked process if needed.</summary>
-    TargetReadiness Find(MacroDefinition macro, TargetProfile profile, PlaybackOptions options, ManualWindowBinding? manualWindow);
+    TargetReadiness Find(MacroDefinition macro, ZmboxTargetSettings target, PlaybackOptions options, ManualWindowBinding? manualWindow);
 
     /// <summary>Checks one specific window, for the per-event pause/recovery decision.</summary>
-    TargetReadiness Check(IntPtr window, MacroDefinition macro, TargetProfile profile, PlaybackOptions options, ManualWindowBinding? manualWindow);
+    TargetReadiness Check(IntPtr window, MacroDefinition macro, ZmboxTargetSettings target, PlaybackOptions options, ManualWindowBinding? manualWindow);
 }

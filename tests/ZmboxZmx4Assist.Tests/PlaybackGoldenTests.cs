@@ -20,7 +20,7 @@ public sealed class PlaybackGoldenTests
         var sink = new RecordingInputSink();
         var player = new PlaybackService(new TargetWindowService(), sink, new AlwaysReadyGuard());
 
-        await player.PlayAsync(macro, BuildProfile(), PlaybackOptions.Default);
+        await player.PlayAsync(macro, BuildTarget(), PlaybackOptions.Default);
 
         Assert.AreEqual(6, sink.Dispatched.Count, string.Join(" ; ", sink.Dispatched));
 
@@ -45,7 +45,7 @@ public sealed class PlaybackGoldenTests
         var sink = new RecordingInputSink();
         var player = new PlaybackService(new TargetWindowService(), sink, new AlwaysReadyGuard());
 
-        await player.PlayAsync(macro, BuildProfile(), PlaybackOptions.Default);
+        await player.PlayAsync(macro, BuildTarget(), PlaybackOptions.Default);
 
         Assert.AreEqual("ForegroundSystemInput|KeyUp|87|None", sink.Released.Single());
     }
@@ -59,7 +59,7 @@ public sealed class PlaybackGoldenTests
 
         await player.PlayAsync(
             macro,
-            BuildProfile(),
+            BuildTarget(),
             PlaybackOptions.Default with { Mode = PlaybackMode.ExperimentalTargetWindow });
 
         Assert.AreEqual(6, sink.Dispatched.Count);
@@ -71,7 +71,7 @@ public sealed class PlaybackGoldenTests
     {
         var player = new PlaybackService(new TargetWindowService(), new RecordingInputSink(), new AlwaysReadyGuard());
 
-        var run = player.PlayAsync(BuildMacro(), BuildProfile(), PlaybackOptions.Default);
+        var run = player.PlayAsync(BuildMacro(), BuildTarget(), PlaybackOptions.Default);
         player.EmergencyStop();
         await run;
         player.EmergencyStop();
@@ -99,10 +99,8 @@ public sealed class PlaybackGoldenTests
         };
     }
 
-    private static TargetProfile BuildProfile() => new()
+    private static ZmboxTargetSettings BuildTarget() => new()
     {
-        Id = ZmboxTargetSettings.TargetProfileId,
-        Name = ZmboxTargetSettings.DisplayName,
         WindowTitleContains = "造梦盒子",
         BackgroundCapability = BackgroundCapability.Verified
     };
@@ -130,10 +128,10 @@ public sealed class PlaybackGoldenTests
     {
         private static readonly IntPtr Window = new(0x1234);
 
-        public TargetReadiness Find(MacroDefinition macro, TargetProfile profile, PlaybackOptions options, ManualWindowBinding? manualWindow) =>
+        public TargetReadiness Find(MacroDefinition macro, ZmboxTargetSettings target, PlaybackOptions options, ManualWindowBinding? manualWindow) =>
             new(Window, true, string.Empty);
 
-        public TargetReadiness Check(IntPtr window, MacroDefinition macro, TargetProfile profile, PlaybackOptions options, ManualWindowBinding? manualWindow) =>
+        public TargetReadiness Check(IntPtr window, MacroDefinition macro, ZmboxTargetSettings target, PlaybackOptions options, ManualWindowBinding? manualWindow) =>
             new(window, true, string.Empty);
     }
 }

@@ -311,8 +311,6 @@
                             <Grid.ColumnDefinitions><ColumnDefinition Width="Auto"/><ColumnDefinition Width="*"/></Grid.ColumnDefinitions>
                             <TextBlock Text="目标" Foreground="{StaticResource MutedBrush}" FontSize="11" VerticalAlignment="Top"/>
                             <TextBlock x:Name="SelectedWindowText" Grid.Column="1" Text="开始回放会给出 3 秒倒计时；请在结束前点击要回放的游戏窗口。" Foreground="{StaticResource TextBrush}" FontSize="11" TextWrapping="Wrap" Margin="9,0,0,0"/>
-                            <ComboBox x:Name="ProfilesCombo" Visibility="Collapsed" DisplayMemberPath="Name" SelectionChanged="ProfilesCombo_SelectionChanged"/>
-                            <Button x:Name="CloneProfileButton" Visibility="Collapsed" Content="复制配置" Style="{StaticResource QuietButton}" Click="CloneProfileButton_Click"/>
                         </Grid>
 
                         <Border Background="#13232D" BorderBrush="{StaticResource PanelBorderBrush}" BorderThickness="1" CornerRadius="6" Padding="12" Margin="0,11,0,0">
@@ -392,12 +390,10 @@
                         <Expander Header="目标与热键">
                             <StackPanel Margin="0,8,0,2">
                                 <TextBlock Text="固定目标：造梦盒子《造梦西游四》。路径在锁定窗口时自动记忆。" Foreground="{StaticResource MutedBrush}" FontSize="11" TextWrapping="Wrap"/>
-                                <TextBox x:Name="ProfileNameText" Visibility="Collapsed"/>
                                 <TextBlock Text="启动器 EXE 路径" Foreground="{StaticResource MutedBrush}" FontSize="11" Margin="0,8,0,3"/>
                                 <TextBox x:Name="ExecutablePathText" IsReadOnly="True"/>
                                 <TextBlock Text="窗口标题须包含" Foreground="{StaticResource MutedBrush}" FontSize="11" Margin="0,7,0,3"/>
                                 <TextBox x:Name="WindowTitleText" IsReadOnly="True"/>
-                                <Button x:Name="SaveProfileButton" Visibility="Collapsed" Content="保存配置档" Style="{StaticResource QuietButton}" Click="SaveProfileButton_Click"/>
                                 <Border Height="1" Background="{StaticResource PanelBorderBrush}" Margin="0,12,0,9"/>
                                 <TextBlock Text="全局热键" FontSize="13" FontWeight="SemiBold"/>
                                 <TextBlock Text="点击输入框后按组合键；控制热键不会写入宏。" Foreground="{StaticResource MutedBrush}" FontSize="11" TextWrapping="Wrap" Margin="0,3,0,0"/>
