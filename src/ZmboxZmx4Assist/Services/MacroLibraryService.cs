@@ -54,7 +54,18 @@ public sealed class MacroLibraryService
             SaveProfiles(defaults);
             return defaults;
         }
-        var profiles = JsonSerializer.Deserialize<List<TargetProfile>>(File.ReadAllText(_profilesPath), JsonOptions) ?? [];
+        List<TargetProfile> profiles;
+        try
+        {
+            profiles = JsonSerializer.Deserialize<List<TargetProfile>>(File.ReadAllText(_profilesPath), JsonOptions) ?? [];
+        }
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or JsonException or NotSupportedException)
+        {
+            // profiles.json is a legacy file and the single supported target lives in target.json.
+            // A damaged legacy file must never block startup; keep it on disk for diagnosis
+            // instead of overwriting it with defaults.
+            return [new TargetProfile()];
+        }
         // 360 Game Hall has no useful background-input path here. Retire only the historical
         // preset by its original name; macros are deliberately not touched and remain loadable.
         var migrated = profiles
@@ -95,6 +106,11 @@ public sealed class MacroLibraryService
             {
                 var macro = JsonSerializer.Deserialize<MacroDefinition>(File.ReadAllText(path), JsonOptions);
                 if (macro is null) throw new JsonException("文件没有包含可用宏数据。");
+                if (macro.SchemaVersion > MacroDefinition.CurrentSchemaVersion)
+                {
+                    throw new JsonException(
+                        $"宏格式版本 {macro.SchemaVersion} 高于本程序支持的 {MacroDefinition.CurrentSchemaVersion}；已跳过，避免回放行为不一致。");
+                }
                 macros.Add(macro);
             }
             catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or JsonException or NotSupportedException)

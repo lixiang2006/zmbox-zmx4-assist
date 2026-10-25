@@ -162,8 +162,18 @@ public partial class MainWindow : System.Windows.Window
 
     private void ReplaceProfile(TargetProfile replacement)
     {
-        var index = _profiles.IndexOf(SelectedProfile!);
-        _profiles[index] = replacement;
+        // TargetProfile is a value-equal record: callers such as MarkBackground() mutate
+        // _targetSettings before calling this, so IndexOf(SelectedProfile) can no longer match
+        // the stored instance. Match by Id instead and fall back to appending.
+        var index = -1;
+        for (var i = 0; i < _profiles.Count; i++)
+        {
+            if (_profiles[i].Id != replacement.Id) continue;
+            index = i;
+            break;
+        }
+        if (index >= 0) _profiles[index] = replacement;
+        else _profiles.Add(replacement);
         ProfilesCombo.SelectedItem = replacement;
         foreach (var item in _macros) item.Replace(item.Macro, ProfileNameFor(item.Macro.TargetProfileId));
         _library.SaveProfiles(_profiles);
@@ -172,12 +182,17 @@ public partial class MainWindow : System.Windows.Window
 
     private void RecordButton_Click(object? sender, RoutedEventArgs e)
     {
-        if (_restartSession.IsRunning)
+        if (_recorder.IsRecording) { FinishRecording(); return; }
+        if (_restartSession.IsRunning || _player.IsRunning)
         {
-            SetStatus("自动重启会话正在运行；请先按紧急停止后再录制。");
+            // The global hotkey calls this method directly, bypassing the disabled button, so the
+            // guard belongs here as well: recording while SendInput-driven playback runs would
+            // capture injected events as if the user had typed them.
+            SetStatus(_restartSession.IsRunning
+                ? "自动重启会话正在运行；请先按紧急停止后再录制。"
+                : "回放正在运行；请先按紧急停止后再录制。");
             return;
         }
-        if (_recorder.IsRecording) { FinishRecording(); return; }
         var profile = SelectedProfile;
         if (!_recorder.Start(profile, _hotkeySettings)) { ShowRecordingResult("录制只能在目标窗口位于前台时启动。", false); return; }
         _recordingIndicator.ShowRecording(_hotkeySettings.RecordHotkey.DisplayText);
@@ -270,6 +285,11 @@ public partial class MainWindow : System.Windows.Window
 
     private async Task PlayAsync()
     {
+        if (_recorder.IsRecording)
+        {
+            SetStatus("正在录制；请先结束录制再开始回放。");
+            return;
+        }
         if (_restartSession.IsRunning || _player.IsRunning)
         {
             SetStatus("已有回放会话正在运行。按紧急停止后再开始新的回放。");
@@ -336,6 +356,26 @@ public partial class MainWindow : System.Windows.Window
         _restartSession.EmergencyStop();
         _player.EmergencyStop();
         SetStatus("已请求紧急停止并释放输入。");
+    }
+
+    /// <summary>
+    /// Best-effort release of every held key/button for the dispatcher unhandled-exception
+    /// handler: a UI-thread crash during playback must not leave the game with inputs stuck down.
+    /// Never throws, because it runs while the process is already in a faulted state.
+    /// </summary>
+    public void EmergencyStopForCrash()
+    {
+        try
+        {
+            _highlighter.Stop();
+            if (_recorder.IsRecording) _recorder.Abort("程序遇到未预期错误，本次录制已丢弃。");
+            _restartSession.EmergencyStop();
+            _player.EmergencyStop();
+        }
+        catch
+        {
+            // Swallow: crash recovery must not raise a second exception.
+        }
     }
 
     private RestartSessionRequest? CreateRestartSessionRequest(

@@ -31,3 +31,9 @@ once. A failure in any of those checks stops safely and leaves input released.
 ## Old macros are missing
 
 Check `%LOCALAPPDATA%\GameMacro\macros` and `%LOCALAPPDATA%\ZmboxZmx4Assist\macros`. The first launch copies legacy data; it never deletes the old files. A malformed JSON macro is left in place and reported by the application.
+
+## An unexpected-error dialog appears
+
+The application logs unexpected UI-thread exceptions to `%LOCALAPPDATA%\ZmboxZmx4Assist\crash.log`, releases any held keys/buttons, and keeps running. Attach that file to a bug report.
+
+A damaged `settings.json` (for example a shortcut written as a string instead of a number) is ignored and the default F8/F9/F12 hotkeys are used; a damaged legacy `profiles.json` is left untouched and the single supported target is used instead. Repair or delete the affected file and restart the application.

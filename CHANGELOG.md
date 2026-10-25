@@ -5,6 +5,11 @@
 - Add an opt-in automatic restart session for 造梦盒子: after a safe primary-macro boundary, request normal close, launch the remembered executable, restore the locked physical layout, wait for startup, run one preparation macro, and continue remaining primary iterations.
 - Keep restart state local to the target settings; default to disabled, require a distinct preparation macro and a verified executable path, and preserve the selected input channel.
 - Add exact launched-PID binding, process-start identity checks, one bounded retry for a process that exits before showing its window, and safe failure paths that never force-kill or click unknown dialogs.
+- Fix the crash when marking a target's background capability as passed or unsupported (profiles are now updated by id instead of a value comparison that could no longer match).
+- Keep record and playback sessions mutually exclusive even when triggered from global hotkeys: F8 during playback and F9 during recording are ignored with a status message instead of starting a conflicting session.
+- Treat damaged local JSON as recoverable: a malformed `settings.json` shortcut no longer aborts startup, and a damaged legacy `profiles.json` falls back in memory without overwriting the file.
+- Skip macro files whose schema version is newer than this build supports and list them as skipped, instead of replaying data the program does not understand.
+- Log unexpected UI-thread exceptions to `%LOCALAPPDATA%\ZmboxZmx4Assist\crash.log`, release held keys/buttons, and keep the session running.
 
 ## 1.0.4
 
