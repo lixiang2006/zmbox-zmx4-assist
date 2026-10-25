@@ -1,5 +1,4 @@
 using System.Diagnostics;
-using System.Runtime.InteropServices;
 using ZmboxZmx4Assist.Domain;
 using ZmboxZmx4Assist.Interop;
 using ZmboxZmx4Assist.Utilities;
@@ -10,12 +9,18 @@ public sealed class PlaybackService : IPlaybackRoundExecutor
 {
     private const int ForegroundRecoverySeconds = 5;
     private const int BackgroundRecoverySeconds = 15;
-    private readonly TargetWindowService _targets;
+    private readonly IInputSink _input;
+    private readonly IPlaybackTargetGuard _targetGuard;
     private readonly HashSet<int> _pressedKeys = [];
     private readonly Dictionary<MouseButtonKind, RecordedEvent> _pressedButtons = [];
     private CancellationTokenSource? _running;
 
-    public PlaybackService(TargetWindowService targets) => _targets = targets;
+    public PlaybackService(TargetWindowService targets, IInputSink? input = null, IPlaybackTargetGuard? targetGuard = null)
+    {
+        _input = input ?? new NativeInputSink();
+        _targetGuard = targetGuard ?? new TargetWindowGuard(targets);
+    }
+
     public bool IsRunning => _running is not null;
     public event Action<string>? StatusChanged;
     public event Action? StateChanged;
@@ -143,14 +148,14 @@ public sealed class PlaybackService : IPlaybackRoundExecutor
 
     private IntPtr EnsureTargetReady(MacroDefinition macro, TargetProfile profile, PlaybackOptions options, ManualWindowBinding? manualWindow)
     {
-        var readiness = FindTargetReadiness(macro, profile, options, manualWindow);
+        var readiness = _targetGuard.Find(macro, profile, options, manualWindow);
         if (!readiness.IsReady) throw new InvalidOperationException(readiness.Reason);
         return readiness.Window;
     }
 
     private async Task<IntPtr> RecoverFoundWindowAsync(MacroDefinition macro, TargetProfile profile, PlaybackOptions options, ManualWindowBinding? manualWindow, CancellationToken token)
     {
-        var readiness = FindTargetReadiness(macro, profile, options, manualWindow);
+        var readiness = _targetGuard.Find(macro, profile, options, manualWindow);
         if (readiness.IsReady) return readiness.Window;
         return (await RecoverWindowAsync(macro, profile, options, manualWindow, readiness.Reason, HeldInputState.Empty, token)).Window;
     }
@@ -184,7 +189,7 @@ public sealed class PlaybackService : IPlaybackRoundExecutor
 
     private async Task<RecoveryResult> RecoverCurrentWindowIfNeededAsync(IntPtr window, MacroDefinition macro, TargetProfile profile, PlaybackOptions options, ManualWindowBinding? manualWindow, CancellationToken token)
     {
-        var readiness = CheckWindowReadiness(window, macro, profile, options, manualWindow);
+        var readiness = _targetGuard.Check(window, macro, profile, options, manualWindow);
         if (readiness.IsReady) return new RecoveryResult(window, 0);
 
         var held = SnapshotHeldInputs();
@@ -203,7 +208,7 @@ public sealed class PlaybackService : IPlaybackRoundExecutor
         while (true)
         {
             token.ThrowIfCancellationRequested();
-            var readiness = FindTargetReadiness(macro, profile, options, manualWindow);
+            var readiness = _targetGuard.Find(macro, profile, options, manualWindow);
             if (readiness.IsReady)
             {
                 RestoreHeldInputs(readiness.Window, options.Mode, held);
@@ -227,57 +232,6 @@ public sealed class PlaybackService : IPlaybackRoundExecutor
         }
     }
 
-    private TargetReadiness FindTargetReadiness(MacroDefinition macro, TargetProfile profile, PlaybackOptions options, ManualWindowBinding? manualWindow)
-    {
-        if (manualWindow is { } binding)
-        {
-            var direct = CheckWindowReadiness(binding.Window.Handle, macro, profile, options, binding);
-            if (direct.IsReady) return direct;
-
-            // Launchers can rebuild their top-level HWND while retaining the same
-            // process. Rebind only inside the user-selected PID; never select a
-            // different Zmbox instance or another application's window.
-            var rebound = _targets.TryRebindSelectedZmboxWindow(binding.Window);
-            if (rebound is null || rebound.Handle == binding.Window.Handle) return direct;
-            return CheckWindowReadiness(
-                rebound.Handle,
-                macro,
-                profile,
-                options,
-                new ManualWindowBinding(rebound, binding.MatchesSelectedProfile));
-        }
-        var window = _targets.Find(profile);
-        if (window == IntPtr.Zero) return new TargetReadiness(IntPtr.Zero, false, "未找到匹配的目标窗口。");
-        return CheckWindowReadiness(window, macro, profile, options, null);
-    }
-
-    private TargetReadiness CheckWindowReadiness(IntPtr window, MacroDefinition macro, TargetProfile profile, PlaybackOptions options, ManualWindowBinding? manualWindow)
-    {
-        if (manualWindow is { } binding)
-        {
-            var validation = window == binding.Window.Handle
-                ? _targets.ValidateSelectedWindow(binding.Window)
-                : _targets.ValidateRecoveredWindow(window, binding.Window.ProcessId);
-            if (validation is not null)
-            {
-                var processIsRebuildingWindow = _targets.IsProcessAlive(binding.Window.ProcessId);
-                return new TargetReadiness(IntPtr.Zero, false, validation, processIsRebuildingWindow);
-            }
-            if (options.Mode == PlaybackMode.ExperimentalTargetWindow && !binding.MatchesSelectedProfile)
-                return new TargetReadiness(window, false, "手动选择的窗口不匹配当前配置档，不能使用后台窗口消息。");
-        }
-        if (!_targets.IsWindow(window)) return new TargetReadiness(IntPtr.Zero, false, "目标窗口句柄已失效。");
-        // Focus is checked before geometry. Switching to another foreground app must
-        // pause safely, but it is not evidence that the locked Zmbox window moved.
-        if (options.Mode == PlaybackMode.ForegroundSystemInput && !_targets.IsForeground(window))
-            return new TargetReadiness(window, false, "已切离锁定的造梦盒子窗口，前台输入已暂停。");
-        var layout = _targets.CompareLayout(window, macro.DisplayLayout);
-        if (!layout.IsMatch) return new TargetReadiness(window, false, layout.Reason, layout.IsTransient);
-        if (options.Mode == PlaybackMode.ExperimentalTargetWindow && profile.BackgroundCapability == BackgroundCapability.Unsupported)
-            return new TargetReadiness(window, false, "此启动器已标记为不支持后台回放。");
-        return new TargetReadiness(window, true, string.Empty);
-    }
-
     private static async Task WaitUntilAsync(long start, double dueMicroseconds, CancellationToken token)
     {
         var dueTicks = (long)(dueMicroseconds * Stopwatch.Frequency / 1_000_000d);
@@ -293,77 +247,9 @@ public sealed class PlaybackService : IPlaybackRoundExecutor
 
     private void Dispatch(IntPtr window, RecordedEvent e, PlaybackMode mode, VirtualScreenBounds bounds)
     {
-        if (mode == PlaybackMode.ForegroundSystemInput) SendInput(e, bounds); else PostWindowMessage(window, e);
+        _input.Dispatch(window, e, mode, bounds);
         Track(e);
     }
-
-    private static void SendInput(RecordedEvent e, VirtualScreenBounds bounds)
-    {
-        if (e.Kind is InputEventKind.KeyDown or InputEventKind.KeyUp)
-        {
-            // Extended keys (arrows, Home/End, right Ctrl/Alt, ...) only work when the injected
-            // event carries KEYEVENTF_EXTENDEDKEY; without it SendInput delivers the numpad key.
-            var flags = (e.Kind == InputEventKind.KeyUp ? NativeMethods.KEYEVENTF_KEYUP : 0u)
-                | (NativeMethods.IsExtendedKey(e.VirtualKey) ? NativeMethods.KEYEVENTF_EXTENDEDKEY : 0u);
-            var keyboardInput = new NativeMethods.Input { Type = NativeMethods.INPUT_KEYBOARD, U = new NativeMethods.InputUnion { Keyboard = new NativeMethods.KeyboardInput { Vk = (ushort)e.VirtualKey, Flags = flags } } };
-            if (NativeMethods.SendInput(1, [keyboardInput], NativeMethods.InputSize) != 1) throw new InvalidOperationException("Windows 拒绝了键盘输入事件。");
-            return;
-        }
-
-        var mouse = ToMouseInput(e, bounds);
-        var mouseInput = new NativeMethods.Input { Type = NativeMethods.INPUT_MOUSE, U = new NativeMethods.InputUnion { Mouse = mouse } };
-        if (e.Kind is InputEventKind.MouseDown or InputEventKind.MouseUp or InputEventKind.MouseWheel)
-        {
-            var position = mouse;
-            position.DwFlags = NativeMethods.MOUSEEVENTF_MOVE | NativeMethods.MOUSEEVENTF_ABSOLUTE;
-            position.MouseData = 0;
-            var inputs = new[] { new NativeMethods.Input { Type = NativeMethods.INPUT_MOUSE, U = new NativeMethods.InputUnion { Mouse = position } }, mouseInput };
-            if (NativeMethods.SendInput((uint)inputs.Length, inputs, NativeMethods.InputSize) != inputs.Length) throw new InvalidOperationException("Windows 拒绝了鼠标输入事件。");
-        }
-        else if (NativeMethods.SendInput(1, [mouseInput], NativeMethods.InputSize) != 1) throw new InvalidOperationException("Windows 拒绝了鼠标输入事件。");
-    }
-
-    private static NativeMethods.MouseInput ToMouseInput(RecordedEvent e, VirtualScreenBounds bounds)
-    {
-        uint flags = e.Kind switch
-        {
-            InputEventKind.MouseMove => NativeMethods.MOUSEEVENTF_MOVE | NativeMethods.MOUSEEVENTF_ABSOLUTE,
-            InputEventKind.MouseWheel => NativeMethods.MOUSEEVENTF_WHEEL,
-            InputEventKind.MouseDown => e.Button switch { MouseButtonKind.Left => NativeMethods.MOUSEEVENTF_LEFTDOWN, MouseButtonKind.Right => NativeMethods.MOUSEEVENTF_RIGHTDOWN, MouseButtonKind.Middle => NativeMethods.MOUSEEVENTF_MIDDLEDOWN, _ => NativeMethods.MOUSEEVENTF_XDOWN },
-            InputEventKind.MouseUp => e.Button switch { MouseButtonKind.Left => NativeMethods.MOUSEEVENTF_LEFTUP, MouseButtonKind.Right => NativeMethods.MOUSEEVENTF_RIGHTUP, MouseButtonKind.Middle => NativeMethods.MOUSEEVENTF_MIDDLEUP, _ => NativeMethods.MOUSEEVENTF_XUP },
-            _ => 0u
-        };
-        var (dx, dy) = MouseCoordinateTranslator.ToAbsolute(e.X, e.Y, bounds);
-        return new NativeMethods.MouseInput { Dx = dx, Dy = dy, MouseData = e.Kind == InputEventKind.MouseWheel ? (uint)e.WheelDelta : e.Button is MouseButtonKind.X1 ? 1u : e.Button is MouseButtonKind.X2 ? 2u : 0u, DwFlags = flags };
-    }
-
-    private static void PostWindowMessage(IntPtr window, RecordedEvent e)
-    {
-        (int message, IntPtr wParam, IntPtr lParam) = e.Kind switch
-        {
-            InputEventKind.KeyDown => (NativeMethods.WM_KEYDOWN, (IntPtr)e.VirtualKey, NativeMethods.MakeKeyLParam(false, e.VirtualKey)),
-            InputEventKind.KeyUp => (NativeMethods.WM_KEYUP, (IntPtr)e.VirtualKey, NativeMethods.MakeKeyLParam(true, e.VirtualKey)),
-            InputEventKind.MouseMove => (NativeMethods.WM_MOUSEMOVE, IntPtr.Zero, NativeMethods.MakeMouseLParam(window, e.X, e.Y)),
-            // The wheel delta lives in the high word; the low word carries modifier state (0 here).
-            // lParam is in screen coordinates for this message, not client coordinates.
-            InputEventKind.MouseWheel => (NativeMethods.WM_MOUSEWHEEL, (IntPtr)((uint)(ushort)e.WheelDelta << 16), NativeMethods.MakeWheelLParam(e.X, e.Y)),
-            InputEventKind.MouseDown => (MouseMessage(e.Button, true), IntPtr.Zero, NativeMethods.MakeMouseLParam(window, e.X, e.Y)),
-            InputEventKind.MouseUp => (MouseMessage(e.Button, false), IntPtr.Zero, NativeMethods.MakeMouseLParam(window, e.X, e.Y)),
-            _ => throw new InvalidOperationException("未知输入事件。")
-        };
-        if (!NativeMethods.PostMessage(window, (uint)message, wParam, lParam)) throw new InvalidOperationException("目标窗口拒绝了输入消息。");
-    }
-
-    private static int MouseMessage(MouseButtonKind button, bool down) => (button, down) switch
-    {
-        (MouseButtonKind.Left, true) => NativeMethods.WM_LBUTTONDOWN,
-        (MouseButtonKind.Left, false) => NativeMethods.WM_LBUTTONUP,
-        (MouseButtonKind.Right, true) => NativeMethods.WM_RBUTTONDOWN,
-        (MouseButtonKind.Right, false) => NativeMethods.WM_RBUTTONUP,
-        (MouseButtonKind.Middle, true) => NativeMethods.WM_MBUTTONDOWN,
-        (MouseButtonKind.Middle, false) => NativeMethods.WM_MBUTTONUP,
-        _ => down ? NativeMethods.WM_XBUTTONDOWN : NativeMethods.WM_XBUTTONUP
-    };
 
     private void Track(RecordedEvent e)
     {
@@ -395,8 +281,7 @@ public sealed class PlaybackService : IPlaybackRoundExecutor
     {
         try
         {
-            if (mode == PlaybackMode.ForegroundSystemInput) SendInputRelease(e);
-            else if (_targets.IsWindow(window)) PostWindowMessage(window, e);
+            _input.Release(window, e, mode);
         }
         catch
         {
@@ -404,21 +289,6 @@ public sealed class PlaybackService : IPlaybackRoundExecutor
         }
     }
 
-    private static void SendInputRelease(RecordedEvent e)
-    {
-        if (e.Kind == InputEventKind.KeyUp)
-        {
-            SendInput(e, default);
-            return;
-        }
-
-        var mouse = ToMouseInput(e, default);
-        var mouseInput = new NativeMethods.Input { Type = NativeMethods.INPUT_MOUSE, U = new NativeMethods.InputUnion { Mouse = mouse } };
-        if (NativeMethods.SendInput(1, [mouseInput], NativeMethods.InputSize) != 1)
-            throw new InvalidOperationException("Windows 拒绝了鼠标释放事件。");
-    }
-
-    private sealed record TargetReadiness(IntPtr Window, bool IsReady, string Reason, bool IsTransient = false);
     private sealed record RecoveryResult(IntPtr Window, long PauseTicks);
     private sealed record HeldInputState(int[] Keys, RecordedEvent[] Buttons)
     {

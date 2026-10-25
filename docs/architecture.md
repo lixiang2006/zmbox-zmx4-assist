@@ -15,6 +15,12 @@ composition, shared window state and the status/control-refresh helpers, while
 `MainWindow.Macros.cs` and `MainWindow.Hotkeys.cs` carry one feature each.
 Adding behaviour to a feature belongs in its own partial file, not in the core.
 
+Playback talks to the desktop through two narrow seams: `IInputSink` delivers
+one recorded event (`NativeInputSink` for Windows, a recording sink in tests)
+and `IPlaybackTargetGuard` answers the readiness question (`TargetWindowGuard`
+for the live window). The golden playback tests drive the real timeline through
+both, so the dispatch sequence is pinned without touching a desktop.
+
 `RestartSessionService` owns one cancellation token and orchestrates a primary
 macro as discrete safe iterations. At a configured session-uptime boundary it
 delegates normal close, exact-PID launch/window binding, layout restore and a
