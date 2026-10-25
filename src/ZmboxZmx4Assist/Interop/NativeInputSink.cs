@@ -1,3 +1,4 @@
+using System.Runtime.InteropServices;
 using ZmboxZmx4Assist.Domain;
 using ZmboxZmx4Assist.Services;
 using ZmboxZmx4Assist.Utilities;
@@ -25,6 +26,29 @@ internal sealed class NativeInputSink : IInputSink
         }
         if (NativeMethods.IsWindow(window)) PostWindowMessage(window, e);
     }
+
+    public bool TryProbeBackgroundChannel(IntPtr window, out string reason)
+    {
+        reason = string.Empty;
+        if (!NativeMethods.IsWindow(window))
+        {
+            reason = "目标窗口已关闭，无法投递后台输入。";
+            return false;
+        }
+
+        if (NativeMethods.PostMessage(window, NativeMethods.WM_NULL, IntPtr.Zero, IntPtr.Zero)) return true;
+        reason = DescribeRejection(window, Marshal.GetLastWin32Error());
+        return false;
+    }
+
+    private static string DescribeRejection(IntPtr window, int errorCode)
+    {
+        NativeMethods.GetWindowThreadProcessId(window, out var processId);
+        var target = processId == 0 ? IntegrityBand.Unknown : ProcessIntegrity.OfProcess((int)processId);
+        return ProcessIntegrity.DescribeWindowMessageFailure(errorCode, ProcessIntegrity.OfCurrentProcess(), target, ProgramDirectory());
+    }
+
+    private static string? ProgramDirectory() => Path.GetDirectoryName(Environment.ProcessPath);
 
     private static void SendInputEvent(RecordedEvent e, VirtualScreenBounds bounds)
     {
@@ -80,7 +104,8 @@ internal sealed class NativeInputSink : IInputSink
             InputEventKind.MouseUp => (MouseMessage(e.Button, false), IntPtr.Zero, NativeMethods.MakeMouseLParam(window, e.X, e.Y)),
             _ => throw new InvalidOperationException("未知输入事件。")
         };
-        if (!NativeMethods.PostMessage(window, (uint)message, wParam, lParam)) throw new InvalidOperationException("目标窗口拒绝了输入消息。");
+        if (!NativeMethods.PostMessage(window, (uint)message, wParam, lParam))
+            throw new InvalidOperationException(DescribeRejection(window, Marshal.GetLastWin32Error()));
     }
 
     private static int MouseMessage(MouseButtonKind button, bool down) => (button, down) switch

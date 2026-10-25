@@ -20,6 +20,8 @@
 - Record only the mouse moves that matter: a move is kept when it is at least 8 ms or 2 px away from the previously kept one, so a dense 65-second macro drops from ~1900 to a few hundred events without a visible path change. A recording also stops with a visible warning at 200,000 events, keeping what was captured instead of growing without bound.
 - Store macros in a compact schema: each event is a positional array instead of a repeated object, so the largest real macro drops from 333 KB to 53 KB (−84%). Files written by older builds still load unchanged and are upgraded the next time they are saved.
 - Validate a macro's timeline once when it is loaded or saved, not again on every playback round; a long restart session no longer re-sorts the whole event list at each iteration boundary, and a damaged macro is reported once instead of failing mid-session.
+- Diagnose a rejected background channel instead of aborting mid-macro: a background playback now probes the target window once, and when Windows refuses the post (UIPI), it reports both processes' integrity levels and the exact `icacls` command that fixes a low-integrity program folder; every posted message also names the Win32 error code.
+- Reset the published folder and archive to medium integrity in `scripts/publish.ps1`, so a release built from a low-integrity folder cannot ship a program whose background channel is permanently blocked.
 
 ## 1.0.4
 

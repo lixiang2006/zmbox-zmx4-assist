@@ -8,9 +8,21 @@ Click the Zmbox window before the countdown reaches zero. The process must be na
 
 Keep the recorded display DPI and resolution. Position and size may vary by up to eight physical pixels; beyond that the app pauses and tries to recover for five seconds before safely stopping.
 
-## Background playback has no effect
+## Background playback is rejected or has no effect
 
-Use foreground system input. The background option is an ordinary Windows message experiment and is not a compatibility promise.
+Background playback posts ordinary window messages instead of injecting system input, so Windows applies integrity-based access control (UIPI): a process running at a *lower* integrity level than the game cannot post messages to its window. A common cause is that the program was started from a folder that carries a `Low Mandatory Level` label — the exe inherits the label, and the process then always runs at low integrity, even when started by an administrator.
+
+Before a background playback starts, the application probes the target window once. When Windows refuses the post, it reports both integrity levels plus the exact command to fix it. To relabel the files, run in a terminal (adjust the folder):
+
+    icacls "<program folder>" /setintegritylevel (OI)(CI)Medium
+
+then restart the application — a running process keeps the integrity level it started with. Running the application as administrator also works, because a high-integrity process may post to lower ones. `scripts/publish.ps1` resets the published folder and zip to medium integrity, so a release package built from a low-integrity folder cannot make background playback fail for everyone.
+
+Some games also ignore posted messages outright; if relabelling and a restart still leave background playback without effect, use the foreground channel for that game — foreground playback steals the keyboard and mouse, which is why the background channel exists in the first place.
+
+## Hotkey recording starts while a macro is replaying
+
+F8 and F9 are deliberately ignored while a playback is running, and playback is rejected while a recording is running, so a hotkey cannot start a conflicting session. Stop the current session with F12 first.
 
 ## Automatic restart session will not start
 

@@ -105,6 +105,12 @@ public sealed class PlaybackGoldenTests
 
         public void Release(IntPtr window, RecordedEvent e, PlaybackMode mode) =>
             Released.Add($"{mode}|{e.Kind}|{e.VirtualKey}|{e.Button}");
+
+        public bool TryProbeBackgroundChannel(IntPtr window, out string reason)
+        {
+            reason = string.Empty;
+            return true;
+        }
     }
 
     private sealed class AlwaysReadyGuard : IPlaybackTargetGuard

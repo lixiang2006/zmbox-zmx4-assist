@@ -70,6 +70,12 @@ if (Test-Path -LiteralPath $publishDirectory) {
 & dotnet publish $projectPath -c Release -r win-x64 --self-contained true -p:Version=$releaseVersion -o $publishDirectory
 if ($LASTEXITCODE -ne 0) { throw "dotnet publish 失败（退出码 $LASTEXITCODE）。" }
 
+# 从低完整性目录构建的程序会继承低完整性标签，启动后永远以低完整性运行；Windows 的 UIPI
+# 因此拒绝它向中/高完整性的游戏窗口投递后台消息。发布物统一重置为中完整性。
+& icacls $publishDirectory /setintegritylevel "(OI)(CI)Medium" | Out-Null
+if ($LASTEXITCODE -ne 0) { throw "重置发布目录的完整性标记失败（icacls 退出码 $LASTEXITCODE）。" }
+Write-Host "已将发布目录的完整性标记重置为中完整性。"
+
 if ($SkipArchive) {
     Write-Host "已跳过压缩（-SkipArchive）。"
     return
@@ -78,4 +84,5 @@ if ($SkipArchive) {
 New-Item -ItemType Directory -Path $OutputDirectory -Force | Out-Null
 if (Test-Path -LiteralPath $archivePath) { Remove-Item -LiteralPath $archivePath -Force }
 Compress-Archive -Path (Join-Path $publishDirectory "*") -DestinationPath $archivePath -CompressionLevel Optimal
+& icacls $archivePath /setintegritylevel Medium | Out-Null
 Write-Host "已生成：$archivePath"

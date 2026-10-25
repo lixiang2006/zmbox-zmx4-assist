@@ -15,4 +15,11 @@ public interface IInputSink
 
     /// <summary>Best-effort release of an input that is still held when playback stops.</summary>
     void Release(IntPtr window, RecordedEvent e, PlaybackMode mode);
+
+    /// <summary>
+    /// Checks once before a background playback that this process is actually allowed to post window
+    /// messages to the target. Windows rejects cross-integrity posts, so probing up front turns a
+    /// mystery mid-macro abort into a precise, actionable message.
+    /// </summary>
+    bool TryProbeBackgroundChannel(IntPtr window, out string reason);
 }

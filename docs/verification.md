@@ -2,7 +2,7 @@
 
 ## Automated
 
-- `dotnet test ZmboxZmx4Assist.sln` verifies click normalization, drag preservation, timeline validation, macro/profile persistence, rename stability, damaged-macro isolation, safe-write cleanup, configured-hotkey filtering, X1/X2 translation, virtual-desktop mouse coordinate mapping, extended-key/wheel message encoding, corrupted-settings fallback to default hotkeys, corrupted legacy-profile fallback without overwriting the file, rejection of macros written by a newer schema version, mouse-move sampling thresholds, the playback dispatch sequence behind the input seam, and the compact schema round-tripping while still reading the older object form.
+- `dotnet test ZmboxZmx4Assist.sln` verifies click normalization, drag preservation, timeline validation, macro/profile persistence, rename stability, damaged-macro isolation, safe-write cleanup, configured-hotkey filtering, X1/X2 translation, virtual-desktop mouse coordinate mapping, extended-key/wheel message encoding, corrupted-settings fallback to default hotkeys, corrupted legacy-profile fallback without overwriting the file, rejection of macros written by a newer schema version, mouse-move sampling thresholds, the playback dispatch sequence behind the input seam, integrity-level band mapping plus the background-channel rejection message, and the compact schema round-tripping while still reading the older object form.
 - `dotnet build ZmboxZmx4Assist.sln` verifies the WPF app and test project compile without warnings.
 
 ## Manual acceptance before game use

@@ -77,6 +77,9 @@ public sealed class PlaybackService : IPlaybackRoundExecutor
         {
             _running.Token.ThrowIfCancellationRequested();
             window = EnsureTargetReady(macro, profile, options, manualWindow);
+            // 后台通道靠窗口消息投递；启动前先试一次，把权限/完整性拦截说清楚，而不是在宏跑到一半时中断。
+            if (options.Mode == PlaybackMode.ExperimentalTargetWindow && !_input.TryProbeBackgroundChannel(window, out var probeFailure))
+                throw new InvalidOperationException(probeFailure);
             var iteration = 0;
             do
             {
