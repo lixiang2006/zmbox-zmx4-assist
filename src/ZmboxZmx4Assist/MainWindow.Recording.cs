@@ -53,6 +53,13 @@ public partial class MainWindow
     private void OnRecordingStopped(string reason)
     {
         if (!Dispatcher.CheckAccess()) { Dispatcher.BeginInvoke(() => OnRecordingStopped(reason)); return; }
+        if (_recorder.WasTruncated)
+        {
+            // The event ceiling stopped the session; keep what was captured instead of discarding it.
+            SetStatus(reason);
+            FinishRecording();
+            return;
+        }
         if (_recorder.WasAborted) ShowRecordingResult(reason, false);
         else SetStatus(reason);
         RefreshControlState();

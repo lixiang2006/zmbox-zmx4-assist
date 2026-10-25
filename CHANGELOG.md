@@ -17,6 +17,7 @@
 - Add a single version source (`Directory.Build.props`) and `scripts/publish.ps1`, which stamps that version into the assembly and the self-contained win-x64 archive name; release builds no longer depend on a manually remembered number.
 - Add a tag-triggered release-build workflow: a `v*` tag must match `Directory.Build.props`, the suite runs, and the self-contained zip is uploaded as a workflow artifact. Publishing a GitHub Release stays a separate, explicit authorization.
 - Internal: playback now reaches the desktop through an injectable input seam, and a golden test pins the exact dispatch sequence so later scheduling or storage work cannot silently change what is replayed.
+- Record only the mouse moves that matter: a move is kept when it is at least 8 ms or 2 px away from the previously kept one, so a dense 65-second macro drops from ~1900 to a few hundred events without a visible path change. A recording also stops with a visible warning at 200,000 events, keeping what was captured instead of growing without bound.
 
 ## 1.0.4
 
