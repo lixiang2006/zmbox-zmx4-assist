@@ -1,0 +1,15 @@
+<Project>
+
+  <!--
+    Single version source for the whole repository. The app assembly, the test assembly and the
+    release package all read this value, so a release only needs one edit here (and a matching
+    CHANGELOG entry). The release workflow passes the tag version explicitly and verifies that
+    the two agree before it publishes anything.
+  -->
+  <PropertyGroup>
+    <Version>1.1.0</Version>
+    <Authors>Zmbox ZMX4 Assist contributors</Authors>
+    <RepositoryUrl>https://github.com/lixiang2006/zmbox-zmx4-assist</RepositoryUrl>
+  </PropertyGroup>
+
+</Project>

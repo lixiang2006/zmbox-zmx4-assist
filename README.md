@@ -41,8 +41,15 @@
 ```powershell
 dotnet restore .\ZmboxZmx4Assist.sln
 dotnet test .\ZmboxZmx4Assist.sln -c Release
-dotnet publish .\src\ZmboxZmx4Assist\ZmboxZmx4Assist.csproj -c Release -r win-x64 --self-contained true
 ```
+
+发布包由脚本生成（需要 .NET 8 SDK，默认读取 `Directory.Build.props` 中的版本号）：
+
+```powershell
+pwsh ./scripts/publish.ps1
+```
+
+版本号只有 `Directory.Build.props` 一个来源，同时写进程序集与压缩包名；发布前记得同步 `CHANGELOG.md`。脚本先自包含发布到 `publish/win-x64`，再打包到 `releases/ZmboxZmx4Assist-<版本>-win-x64.zip`。
 
 仓库采用 [GPL-3.0-only](LICENSE)。贡献要求见 [CONTRIBUTING.md](CONTRIBUTING.md)，架构见 [docs/architecture.md](docs/architecture.md)，故障排查见 [docs/troubleshooting.md](docs/troubleshooting.md)。
 
