@@ -8,6 +8,13 @@ only accepts a foreground window whose process name and title identify 造梦盒
 no launcher code or game resource is loaded, modified, injected, or
 redistributed.
 
+The shell is split by feature: `MainWindow.xaml.cs` holds only service
+composition, shared window state and the status/control-refresh helpers, while
+`MainWindow.Recording.cs`, `MainWindow.Playback.cs`,
+`MainWindow.RestartSession.cs`, `MainWindow.TargetWindow.cs`,
+`MainWindow.Macros.cs` and `MainWindow.Hotkeys.cs` carry one feature each.
+Adding behaviour to a feature belongs in its own partial file, not in the core.
+
 `RestartSessionService` owns one cancellation token and orchestrates a primary
 macro as discrete safe iterations. At a configured session-uptime boundary it
 delegates normal close, exact-PID launch/window binding, layout restore and a
