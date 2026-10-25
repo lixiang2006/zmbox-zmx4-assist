@@ -19,6 +19,7 @@
 - Internal: playback now reaches the desktop through an injectable input seam, and a golden test pins the exact dispatch sequence so later scheduling or storage work cannot silently change what is replayed.
 - Record only the mouse moves that matter: a move is kept when it is at least 8 ms or 2 px away from the previously kept one, so a dense 65-second macro drops from ~1900 to a few hundred events without a visible path change. A recording also stops with a visible warning at 200,000 events, keeping what was captured instead of growing without bound.
 - Store macros in a compact schema: each event is a positional array instead of a repeated object, so the largest real macro drops from 333 KB to 53 KB (−84%). Files written by older builds still load unchanged and are upgraded the next time they are saved.
+- Validate a macro's timeline once when it is loaded or saved, not again on every playback round; a long restart session no longer re-sorts the whole event list at each iteration boundary, and a damaged macro is reported once instead of failing mid-session.
 
 ## 1.0.4
 

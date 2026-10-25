@@ -1,5 +1,6 @@
 using System.Text.Json;
 using ZmboxZmx4Assist.Domain;
+using ZmboxZmx4Assist.Utilities;
 
 namespace ZmboxZmx4Assist.Services;
 
@@ -116,6 +117,9 @@ public sealed class MacroLibraryService
                     throw new JsonException(
                         $"宏格式版本 {macro.SchemaVersion} 高于本程序支持的 {MacroDefinition.CurrentSchemaVersion}；已跳过，避免回放行为不一致。");
                 }
+                // Timeline validity is checked here, once per file, instead of on every playback
+                // iteration; a damaged file is reported and skipped like any other load failure.
+                if (MacroValidator.Validate(macro) is { } validationError) throw new JsonException($"宏数据无效：{validationError}");
                 // Upgrade older files in memory: the next save then writes the compact current form.
                 macros.Add(macro with { SchemaVersion = MacroDefinition.CurrentSchemaVersion });
             }
@@ -131,6 +135,7 @@ public sealed class MacroLibraryService
     {
         var error = ValidateMacroName(macro.Name);
         if (error is not null) throw new InvalidOperationException(error);
+        if (MacroValidator.Validate(macro) is { } validationError) throw new InvalidOperationException(validationError);
         var path = Path.Combine(_macros, $"{macro.Id:N}.json");
         WriteJsonAtomically(path, macro);
     }

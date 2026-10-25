@@ -59,8 +59,10 @@ public sealed class PlaybackService : IPlaybackRoundExecutor
         bool reportCompletion)
     {
         if (_running is not null) throw new InvalidOperationException("已有宏正在回放。");
-        var error = MacroValidator.Validate(macro);
-        if (error is not null) throw new InvalidOperationException(error);
+        // Macros are validated once when they are loaded or saved, so a restart session does not
+        // re-sort the whole event list at every iteration boundary; an empty macro is still
+        // rejected here because it cannot produce any input.
+        if (macro.Events.Count == 0) throw new InvalidOperationException("宏没有可回放的输入事件。");
         if (macro.DisplayLayout is null) throw new InvalidOperationException("宏缺少录制时的显示布局，不能安全回放。");
         if (options.SpeedMultiplier is < 0.90 or > 1.10) throw new InvalidOperationException("速度仅可在 0.90x 到 1.10x 之间调整。");
         if (options.InterIterationDelaySeconds is < 0 or > 120) throw new InvalidOperationException("每轮间隔必须在 0 到 120 秒之间。");
