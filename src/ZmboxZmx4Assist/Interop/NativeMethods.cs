@@ -20,6 +20,8 @@ internal static class NativeMethods
         MOUSEEVENTF_RIGHTDOWN = 0x0008, MOUSEEVENTF_RIGHTUP = 0x0010, MOUSEEVENTF_MIDDLEDOWN = 0x0020, MOUSEEVENTF_MIDDLEUP = 0x0040,
         MOUSEEVENTF_XDOWN = 0x0080, MOUSEEVENTF_XUP = 0x0100, MOUSEEVENTF_WHEEL = 0x0800, MOUSEEVENTF_ABSOLUTE = 0x8000;
     internal const uint SM_CXSCREEN = 0, SM_CYSCREEN = 1;
+    internal const int SM_XVIRTUALSCREEN = 76, SM_YVIRTUALSCREEN = 77, SM_CXVIRTUALSCREEN = 78, SM_CYVIRTUALSCREEN = 79;
+    private const uint MAPVK_VK_TO_VSC = 0;
     private const long WS_POPUP = unchecked((long)0x80000000), SS_BLACKRECT = 0x00000004L;
     private const long WS_EX_TRANSPARENT = 0x00000020L, WS_EX_TOOLWINDOW = 0x00000080L, WS_EX_NOACTIVATE = 0x08000000L, WS_EX_TOPMOST = 0x00000008L;
     private static readonly IntPtr HwndTopmost = new(-1);
@@ -58,6 +60,7 @@ internal static class NativeMethods
     [DllImport("user32.dll", SetLastError = true)] internal static extern uint SendInput(uint count, Input[] inputs, int size);
     [DllImport("user32.dll", SetLastError = true)] internal static extern bool PostMessage(IntPtr hWnd, uint message, IntPtr wParam, IntPtr lParam);
     [DllImport("user32.dll")] internal static extern int GetSystemMetrics(int index);
+    [DllImport("user32.dll")] internal static extern uint MapVirtualKey(uint code, uint mapType);
     [DllImport("user32.dll")] internal static extern uint GetDpiForSystem();
     [DllImport("user32.dll")] internal static extern uint GetDpiForWindow(IntPtr hWnd);
     [DllImport("dwmapi.dll")] private static extern int DwmGetWindowAttribute(IntPtr hwnd, int attribute, out Rect value, int valueSize);
@@ -226,6 +229,19 @@ internal static class NativeMethods
         return (IntPtr)((point.Y << 16) | (point.X & 0xffff));
     }
 
+    /// <summary>WM_MOUSEWHEEL carries screen coordinates in lParam, unlike the other mouse messages.</summary>
+    internal static IntPtr MakeWheelLParam(int screenX, int screenY) =>
+        (IntPtr)(((long)(screenY & 0xffff) << 16) | (uint)(screenX & 0xffff));
+
+    internal static VirtualScreenBounds GetVirtualScreenBounds()
+    {
+        var left = GetSystemMetrics(SM_XVIRTUALSCREEN);
+        var top = GetSystemMetrics(SM_YVIRTUALSCREEN);
+        var width = Math.Max(1, GetSystemMetrics(SM_CXVIRTUALSCREEN));
+        var height = Math.Max(1, GetSystemMetrics(SM_CYVIRTUALSCREEN));
+        return new VirtualScreenBounds(left, top, width, height);
+    }
+
     internal static bool TryGetVisualBounds(IntPtr window, out PhysicalRect bounds)
     {
         bounds = default;
@@ -258,7 +274,21 @@ internal static class NativeMethods
         return title.ToString();
     }
 
-    internal static IntPtr MakeKeyLParam(bool keyUp) => (IntPtr)(1 | (keyUp ? unchecked((int)0xC0000000) : 0));
+    internal static IntPtr MakeKeyLParam(bool keyUp, int virtualKey)
+    {
+        // WM_KEYDOWN/WM_KEYUP lParam: repeat count, scan code, extended flag, context,
+        // previous state and transition. A hard-coded scan code of 1 makes targets treat
+        // arrows, Home/End and the right-hand modifiers as unrelated keys.
+        var scanCode = MapVirtualKey((uint)virtualKey, MAPVK_VK_TO_VSC) & 0xFFu;
+        var extended = IsExtendedKey(virtualKey) ? 1L << 24 : 0L;
+        var transition = keyUp ? 0xC0000000L : 0L;
+        return (IntPtr)(1 | ((long)scanCode << 16) | extended | transition);
+    }
+
+    internal static bool IsExtendedKey(int virtualKey) => virtualKey is
+        0x21 or 0x22 or 0x23 or 0x24 or 0x25 or 0x26 or 0x27 or 0x28 or // PgUp PgDn End Home Left Up Right Down
+        0x2D or 0x2E or 0x90 or 0x6F or 0x5B or 0x5C or 0x5D or // Insert Delete NumLock numpad/ LWin RWin Apps
+        0xA3 or 0xA5; // right Ctrl, right Alt
 
     private static DateTime? TryGetProcessStartedAtUtc(Process process)
     {

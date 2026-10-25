@@ -10,6 +10,8 @@
 - Treat damaged local JSON as recoverable: a malformed `settings.json` shortcut no longer aborts startup, and a damaged legacy `profiles.json` falls back in memory without overwriting the file.
 - Skip macro files whose schema version is newer than this build supports and list them as skipped, instead of replaying data the program does not understand.
 - Log unexpected UI-thread exceptions to `%LOCALAPPDATA%\ZmboxZmx4Assist\crash.log`, release held keys/buttons, and keep the session running.
+- Replay clicks on the right monitor: absolute mouse coordinates are now normalised against the whole virtual desktop instead of only the primary screen.
+- Send arrows, Home/End and right-hand modifiers with the extended-key flag, give posted key messages real scan codes, and post wheel messages with screen-space coordinates.
 
 ## 1.0.4
 

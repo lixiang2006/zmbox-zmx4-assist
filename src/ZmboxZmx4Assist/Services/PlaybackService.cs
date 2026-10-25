@@ -297,7 +297,11 @@ public sealed class PlaybackService : IPlaybackRoundExecutor
     {
         if (e.Kind is InputEventKind.KeyDown or InputEventKind.KeyUp)
         {
-            var keyboardInput = new NativeMethods.Input { Type = NativeMethods.INPUT_KEYBOARD, U = new NativeMethods.InputUnion { Keyboard = new NativeMethods.KeyboardInput { Vk = (ushort)e.VirtualKey, Flags = e.Kind == InputEventKind.KeyUp ? NativeMethods.KEYEVENTF_KEYUP : 0 } } };
+            // Extended keys (arrows, Home/End, right Ctrl/Alt, ...) only work when the injected
+            // event carries KEYEVENTF_EXTENDEDKEY; without it SendInput delivers the numpad key.
+            var flags = (e.Kind == InputEventKind.KeyUp ? NativeMethods.KEYEVENTF_KEYUP : 0u)
+                | (NativeMethods.IsExtendedKey(e.VirtualKey) ? NativeMethods.KEYEVENTF_EXTENDEDKEY : 0u);
+            var keyboardInput = new NativeMethods.Input { Type = NativeMethods.INPUT_KEYBOARD, U = new NativeMethods.InputUnion { Keyboard = new NativeMethods.KeyboardInput { Vk = (ushort)e.VirtualKey, Flags = flags } } };
             if (NativeMethods.SendInput(1, [keyboardInput], Marshal.SizeOf<NativeMethods.Input>()) != 1) throw new InvalidOperationException("Windows 拒绝了键盘输入事件。");
             return;
         }
@@ -325,19 +329,20 @@ public sealed class PlaybackService : IPlaybackRoundExecutor
             InputEventKind.MouseUp => e.Button switch { MouseButtonKind.Left => NativeMethods.MOUSEEVENTF_LEFTUP, MouseButtonKind.Right => NativeMethods.MOUSEEVENTF_RIGHTUP, MouseButtonKind.Middle => NativeMethods.MOUSEEVENTF_MIDDLEUP, _ => NativeMethods.MOUSEEVENTF_XUP },
             _ => 0u
         };
-        var width = Math.Max(1, NativeMethods.GetSystemMetrics((int)NativeMethods.SM_CXSCREEN) - 1);
-        var height = Math.Max(1, NativeMethods.GetSystemMetrics((int)NativeMethods.SM_CYSCREEN) - 1);
-        return new NativeMethods.MouseInput { Dx = e.X * 65535 / width, Dy = e.Y * 65535 / height, MouseData = e.Kind == InputEventKind.MouseWheel ? (uint)e.WheelDelta : e.Button is MouseButtonKind.X1 ? 1u : e.Button is MouseButtonKind.X2 ? 2u : 0u, DwFlags = flags };
+        var (dx, dy) = MouseCoordinateTranslator.ToAbsolute(e.X, e.Y, NativeMethods.GetVirtualScreenBounds());
+        return new NativeMethods.MouseInput { Dx = dx, Dy = dy, MouseData = e.Kind == InputEventKind.MouseWheel ? (uint)e.WheelDelta : e.Button is MouseButtonKind.X1 ? 1u : e.Button is MouseButtonKind.X2 ? 2u : 0u, DwFlags = flags };
     }
 
     private static void PostWindowMessage(IntPtr window, RecordedEvent e)
     {
         (int message, IntPtr wParam, IntPtr lParam) = e.Kind switch
         {
-            InputEventKind.KeyDown => (NativeMethods.WM_KEYDOWN, (IntPtr)e.VirtualKey, NativeMethods.MakeKeyLParam(false)),
-            InputEventKind.KeyUp => (NativeMethods.WM_KEYUP, (IntPtr)e.VirtualKey, NativeMethods.MakeKeyLParam(true)),
+            InputEventKind.KeyDown => (NativeMethods.WM_KEYDOWN, (IntPtr)e.VirtualKey, NativeMethods.MakeKeyLParam(false, e.VirtualKey)),
+            InputEventKind.KeyUp => (NativeMethods.WM_KEYUP, (IntPtr)e.VirtualKey, NativeMethods.MakeKeyLParam(true, e.VirtualKey)),
             InputEventKind.MouseMove => (NativeMethods.WM_MOUSEMOVE, IntPtr.Zero, NativeMethods.MakeMouseLParam(window, e.X, e.Y)),
-            InputEventKind.MouseWheel => (NativeMethods.WM_MOUSEWHEEL, (IntPtr)(e.WheelDelta << 16), NativeMethods.MakeMouseLParam(window, e.X, e.Y)),
+            // The wheel delta lives in the high word; the low word carries modifier state (0 here).
+            // lParam is in screen coordinates for this message, not client coordinates.
+            InputEventKind.MouseWheel => (NativeMethods.WM_MOUSEWHEEL, (IntPtr)((uint)(ushort)e.WheelDelta << 16), NativeMethods.MakeWheelLParam(e.X, e.Y)),
             InputEventKind.MouseDown => (MouseMessage(e.Button, true), IntPtr.Zero, NativeMethods.MakeMouseLParam(window, e.X, e.Y)),
             InputEventKind.MouseUp => (MouseMessage(e.Button, false), IntPtr.Zero, NativeMethods.MakeMouseLParam(window, e.X, e.Y)),
             _ => throw new InvalidOperationException("未知输入事件。")
