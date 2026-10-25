@@ -18,7 +18,7 @@ public sealed class PlaybackService : IPlaybackRoundExecutor
     public PlaybackService(TargetWindowService targets, IInputSink? input = null, IPlaybackTargetGuard? targetGuard = null)
     {
         _input = input ?? new NativeInputSink();
-        _targetGuard = targetGuard ?? new TargetWindowGuard(targets);
+        _targetGuard = targetGuard ?? new TargetStateMonitor(targets);
     }
 
     public bool IsRunning => _running is not null;

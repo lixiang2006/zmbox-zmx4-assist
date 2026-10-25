@@ -18,8 +18,13 @@ Adding behaviour to a feature belongs in its own partial file, not in the core.
 Playback talks to the desktop through two narrow seams: `IInputSink` delivers
 one recorded event (`NativeInputSink` for Windows, a recording sink in tests)
 and `IPlaybackTargetGuard` answers the readiness question (`TargetWindowGuard`
-for the live window). The golden playback tests drive the real timeline through
-both, so the dispatch sequence is pinned without touching a desktop.
+for the live window). In production that guard is wrapped by
+`TargetStateMonitor`, which keeps the expensive full answer — process identity,
+layout, DPI, foreground — for one 100 ms interval and answers the per-event
+question from a cheap handle/foreground probe; a dead handle, a lost foreground
+or a background binding that no longer matches the profile still pauses
+immediately. The golden playback tests drive the real timeline through both
+seams, so the dispatch sequence is pinned without touching a desktop.
 
 `RestartSessionService` owns one cancellation token and orchestrates a primary
 macro as discrete safe iterations. At a configured session-uptime boundary it

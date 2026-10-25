@@ -22,6 +22,7 @@
 - Validate a macro's timeline once when it is loaded or saved, not again on every playback round; a long restart session no longer re-sorts the whole event list at each iteration boundary, and a damaged macro is reported once instead of failing mid-session.
 - Diagnose a rejected background channel instead of aborting mid-macro: a background playback now probes the target window once, and when Windows refuses the post (UIPI), it reports both processes' integrity levels and the exact `icacls` command that fixes a low-integrity program folder; every posted message also names the Win32 error code.
 - Reset the published folder and archive to medium integrity in `scripts/publish.ps1`, so a release built from a low-integrity folder cannot ship a program whose background channel is permanently blocked.
+- Stop auditing the target window on every replayed event: the live guard now keeps its full answer for 100 ms and answers the per-event question with two cheap checks (handle alive, foreground owned), so a dense macro spends its time dispatching instead of querying the desktop; a closed window, a lost foreground or a background binding that stopped matching the profile still pauses immediately, and a layout change is caught within one interval.
 
 ## 1.0.4
 
