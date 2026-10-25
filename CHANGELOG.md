@@ -12,6 +12,7 @@
 - Log unexpected UI-thread exceptions to `%LOCALAPPDATA%\ZmboxZmx4Assist\crash.log`, release held keys/buttons, and keep the session running.
 - Replay clicks on the right monitor: absolute mouse coordinates are now normalised against the whole virtual desktop instead of only the primary screen.
 - Send arrows, Home/End and right-hand modifiers with the extended-key flag, give posted key messages real scan codes, and post wheel messages with screen-space coordinates.
+- Raise the system timer resolution only while playback runs and resolve the virtual desktop once per round, so dense macros no longer drift to the default ~15.6 ms timer tick.
 
 ## 1.0.4
 

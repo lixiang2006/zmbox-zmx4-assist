@@ -64,6 +64,7 @@ public sealed class PlaybackService : IPlaybackRoundExecutor
 
         var window = IntPtr.Zero;
         _running = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
+        using var timer = HighResolutionTimer.Acquire();
         StateChanged?.Invoke();
         try
         {
@@ -157,6 +158,9 @@ public sealed class PlaybackService : IPlaybackRoundExecutor
     private async Task<IntPtr> PlayOnceAsync(IReadOnlyList<RecordedEvent> events, IntPtr window, MacroDefinition macro, TargetProfile profile, PlaybackOptions options, ManualWindowBinding? manualWindow, CancellationToken token)
     {
         var started = Stopwatch.GetTimestamp();
+        // The virtual desktop only changes when the display layout does, which playback already
+        // treats as a stop condition, so resolve it once per round instead of per mouse event.
+        var bounds = NativeMethods.GetVirtualScreenBounds();
         foreach (var e in events)
         {
             token.ThrowIfCancellationRequested();
@@ -173,7 +177,7 @@ public sealed class PlaybackService : IPlaybackRoundExecutor
                 if (beforeDispatch.PauseTicks == 0) break;
                 started += beforeDispatch.PauseTicks;
             }
-            Dispatch(window, e, options.Mode);
+            Dispatch(window, e, options.Mode, bounds);
         }
         return window;
     }
@@ -287,13 +291,13 @@ public sealed class PlaybackService : IPlaybackRoundExecutor
         }
     }
 
-    private void Dispatch(IntPtr window, RecordedEvent e, PlaybackMode mode)
+    private void Dispatch(IntPtr window, RecordedEvent e, PlaybackMode mode, VirtualScreenBounds bounds)
     {
-        if (mode == PlaybackMode.ForegroundSystemInput) SendInput(e); else PostWindowMessage(window, e);
+        if (mode == PlaybackMode.ForegroundSystemInput) SendInput(e, bounds); else PostWindowMessage(window, e);
         Track(e);
     }
 
-    private static void SendInput(RecordedEvent e)
+    private static void SendInput(RecordedEvent e, VirtualScreenBounds bounds)
     {
         if (e.Kind is InputEventKind.KeyDown or InputEventKind.KeyUp)
         {
@@ -302,11 +306,11 @@ public sealed class PlaybackService : IPlaybackRoundExecutor
             var flags = (e.Kind == InputEventKind.KeyUp ? NativeMethods.KEYEVENTF_KEYUP : 0u)
                 | (NativeMethods.IsExtendedKey(e.VirtualKey) ? NativeMethods.KEYEVENTF_EXTENDEDKEY : 0u);
             var keyboardInput = new NativeMethods.Input { Type = NativeMethods.INPUT_KEYBOARD, U = new NativeMethods.InputUnion { Keyboard = new NativeMethods.KeyboardInput { Vk = (ushort)e.VirtualKey, Flags = flags } } };
-            if (NativeMethods.SendInput(1, [keyboardInput], Marshal.SizeOf<NativeMethods.Input>()) != 1) throw new InvalidOperationException("Windows 拒绝了键盘输入事件。");
+            if (NativeMethods.SendInput(1, [keyboardInput], NativeMethods.InputSize) != 1) throw new InvalidOperationException("Windows 拒绝了键盘输入事件。");
             return;
         }
 
-        var mouse = ToMouseInput(e);
+        var mouse = ToMouseInput(e, bounds);
         var mouseInput = new NativeMethods.Input { Type = NativeMethods.INPUT_MOUSE, U = new NativeMethods.InputUnion { Mouse = mouse } };
         if (e.Kind is InputEventKind.MouseDown or InputEventKind.MouseUp or InputEventKind.MouseWheel)
         {
@@ -314,12 +318,12 @@ public sealed class PlaybackService : IPlaybackRoundExecutor
             position.DwFlags = NativeMethods.MOUSEEVENTF_MOVE | NativeMethods.MOUSEEVENTF_ABSOLUTE;
             position.MouseData = 0;
             var inputs = new[] { new NativeMethods.Input { Type = NativeMethods.INPUT_MOUSE, U = new NativeMethods.InputUnion { Mouse = position } }, mouseInput };
-            if (NativeMethods.SendInput((uint)inputs.Length, inputs, Marshal.SizeOf<NativeMethods.Input>()) != inputs.Length) throw new InvalidOperationException("Windows 拒绝了鼠标输入事件。");
+            if (NativeMethods.SendInput((uint)inputs.Length, inputs, NativeMethods.InputSize) != inputs.Length) throw new InvalidOperationException("Windows 拒绝了鼠标输入事件。");
         }
-        else if (NativeMethods.SendInput(1, [mouseInput], Marshal.SizeOf<NativeMethods.Input>()) != 1) throw new InvalidOperationException("Windows 拒绝了鼠标输入事件。");
+        else if (NativeMethods.SendInput(1, [mouseInput], NativeMethods.InputSize) != 1) throw new InvalidOperationException("Windows 拒绝了鼠标输入事件。");
     }
 
-    private static NativeMethods.MouseInput ToMouseInput(RecordedEvent e)
+    private static NativeMethods.MouseInput ToMouseInput(RecordedEvent e, VirtualScreenBounds bounds)
     {
         uint flags = e.Kind switch
         {
@@ -329,7 +333,7 @@ public sealed class PlaybackService : IPlaybackRoundExecutor
             InputEventKind.MouseUp => e.Button switch { MouseButtonKind.Left => NativeMethods.MOUSEEVENTF_LEFTUP, MouseButtonKind.Right => NativeMethods.MOUSEEVENTF_RIGHTUP, MouseButtonKind.Middle => NativeMethods.MOUSEEVENTF_MIDDLEUP, _ => NativeMethods.MOUSEEVENTF_XUP },
             _ => 0u
         };
-        var (dx, dy) = MouseCoordinateTranslator.ToAbsolute(e.X, e.Y, NativeMethods.GetVirtualScreenBounds());
+        var (dx, dy) = MouseCoordinateTranslator.ToAbsolute(e.X, e.Y, bounds);
         return new NativeMethods.MouseInput { Dx = dx, Dy = dy, MouseData = e.Kind == InputEventKind.MouseWheel ? (uint)e.WheelDelta : e.Button is MouseButtonKind.X1 ? 1u : e.Button is MouseButtonKind.X2 ? 2u : 0u, DwFlags = flags };
     }
 
@@ -373,8 +377,9 @@ public sealed class PlaybackService : IPlaybackRoundExecutor
 
     private void RestoreHeldInputs(IntPtr window, PlaybackMode mode, HeldInputState held)
     {
-        foreach (var key in held.Keys) Dispatch(window, new RecordedEvent { Kind = InputEventKind.KeyDown, VirtualKey = key }, mode);
-        foreach (var button in held.Buttons) Dispatch(window, button with { Kind = InputEventKind.MouseDown }, mode);
+        var bounds = NativeMethods.GetVirtualScreenBounds();
+        foreach (var key in held.Keys) Dispatch(window, new RecordedEvent { Kind = InputEventKind.KeyDown, VirtualKey = key }, mode, bounds);
+        foreach (var button in held.Buttons) Dispatch(window, button with { Kind = InputEventKind.MouseDown }, mode, bounds);
     }
 
     private void ReleaseAll(IntPtr window, PlaybackMode mode)
@@ -403,13 +408,13 @@ public sealed class PlaybackService : IPlaybackRoundExecutor
     {
         if (e.Kind == InputEventKind.KeyUp)
         {
-            SendInput(e);
+            SendInput(e, default);
             return;
         }
 
-        var mouse = ToMouseInput(e);
+        var mouse = ToMouseInput(e, default);
         var mouseInput = new NativeMethods.Input { Type = NativeMethods.INPUT_MOUSE, U = new NativeMethods.InputUnion { Mouse = mouse } };
-        if (NativeMethods.SendInput(1, [mouseInput], Marshal.SizeOf<NativeMethods.Input>()) != 1)
+        if (NativeMethods.SendInput(1, [mouseInput], NativeMethods.InputSize) != 1)
             throw new InvalidOperationException("Windows 拒绝了鼠标释放事件。");
     }
 

@@ -22,6 +22,9 @@ internal static class NativeMethods
     internal const uint SM_CXSCREEN = 0, SM_CYSCREEN = 1;
     internal const int SM_XVIRTUALSCREEN = 76, SM_YVIRTUALSCREEN = 77, SM_CXVIRTUALSCREEN = 78, SM_CYVIRTUALSCREEN = 79;
     private const uint MAPVK_VK_TO_VSC = 0;
+
+    /// <summary>Marshal.SizeOf is a runtime call; the playback hot path reuses the constant.</summary>
+    internal static readonly int InputSize = Marshal.SizeOf<Input>();
     private const long WS_POPUP = unchecked((long)0x80000000), SS_BLACKRECT = 0x00000004L;
     private const long WS_EX_TRANSPARENT = 0x00000020L, WS_EX_TOOLWINDOW = 0x00000080L, WS_EX_NOACTIVATE = 0x08000000L, WS_EX_TOPMOST = 0x00000008L;
     private static readonly IntPtr HwndTopmost = new(-1);
@@ -61,6 +64,9 @@ internal static class NativeMethods
     [DllImport("user32.dll", SetLastError = true)] internal static extern bool PostMessage(IntPtr hWnd, uint message, IntPtr wParam, IntPtr lParam);
     [DllImport("user32.dll")] internal static extern int GetSystemMetrics(int index);
     [DllImport("user32.dll")] internal static extern uint MapVirtualKey(uint code, uint mapType);
+
+    [DllImport("winmm.dll")] internal static extern uint timeBeginPeriod(uint period);
+    [DllImport("winmm.dll")] internal static extern uint timeEndPeriod(uint period);
     [DllImport("user32.dll")] internal static extern uint GetDpiForSystem();
     [DllImport("user32.dll")] internal static extern uint GetDpiForWindow(IntPtr hWnd);
     [DllImport("dwmapi.dll")] private static extern int DwmGetWindowAttribute(IntPtr hwnd, int attribute, out Rect value, int valueSize);
