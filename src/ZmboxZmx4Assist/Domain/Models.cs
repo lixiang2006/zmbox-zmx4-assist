@@ -169,7 +169,10 @@ public sealed record ManualWindowBinding(WindowCandidate Window, bool MatchesSel
 
 public sealed record MacroDefinition
 {
-    public const int CurrentSchemaVersion = 1;
+    /// <summary>
+    /// Version 2 stores events as compact positional arrays; version 1 object events are still read.
+    /// </summary>
+    public const int CurrentSchemaVersion = 2;
     public int SchemaVersion { get; init; } = CurrentSchemaVersion;
     public Guid Id { get; init; } = Guid.NewGuid();
     public string Name { get; init; } = "未命名宏";

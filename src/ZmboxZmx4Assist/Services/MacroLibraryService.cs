@@ -5,7 +5,12 @@ namespace ZmboxZmx4Assist.Services;
 
 public sealed class MacroLibraryService
 {
-    private static readonly JsonSerializerOptions JsonOptions = new() { WriteIndented = true, PropertyNameCaseInsensitive = true };
+    private static readonly JsonSerializerOptions JsonOptions = new()
+    {
+        WriteIndented = true,
+        PropertyNameCaseInsensitive = true,
+        Converters = { new RecordedEventsJsonConverter() }
+    };
     private readonly string _root;
     private readonly string _macros;
     private readonly string _profilesPath;
@@ -111,7 +116,8 @@ public sealed class MacroLibraryService
                     throw new JsonException(
                         $"宏格式版本 {macro.SchemaVersion} 高于本程序支持的 {MacroDefinition.CurrentSchemaVersion}；已跳过，避免回放行为不一致。");
                 }
-                macros.Add(macro);
+                // Upgrade older files in memory: the next save then writes the compact current form.
+                macros.Add(macro with { SchemaVersion = MacroDefinition.CurrentSchemaVersion });
             }
             catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or JsonException or NotSupportedException)
             {
