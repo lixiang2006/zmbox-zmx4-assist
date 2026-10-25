@@ -15,6 +15,7 @@
 - Raise the system timer resolution only while playback runs and resolve the virtual desktop once per round, so dense macros no longer drift to the default ~15.6 ms timer tick.
 - Split the main window into per-feature partial files (recording, playback, restart session, target window, macros, hotkeys); behaviour is unchanged, but new behaviour now lands in its feature file instead of one 850-line class.
 - Add a single version source (`Directory.Build.props`) and `scripts/publish.ps1`, which stamps that version into the assembly and the self-contained win-x64 archive name; release builds no longer depend on a manually remembered number.
+- Add a tag-triggered release-build workflow: a `v*` tag must match `Directory.Build.props`, the suite runs, and the self-contained zip is uploaded as a workflow artifact. Publishing a GitHub Release stays a separate, explicit authorization.
 
 ## 1.0.4
 

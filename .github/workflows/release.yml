@@ -1,0 +1,56 @@
+name: zmbox-zmx4-assist release build
+
+# A v* tag build verifies the code, checks the tag against Directory.Build.props, runs the
+# full test suite and produces the self-contained win-x64 zip as a workflow artifact.
+# Creating a GitHub Release is intentionally not automated here: it stays an explicit,
+# separately authorized step, so this workflow only asks for read access.
+on:
+  push:
+    tags:
+      - "v*"
+
+permissions:
+  contents: read
+
+jobs:
+  package:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Verify tag matches Directory.Build.props
+        shell: pwsh
+        run: |
+          [xml]$props = Get-Content Directory.Build.props -Raw
+          $declared = ($props.Project.PropertyGroup | Where-Object { $_.Version } | Select-Object -First 1).Version
+          $tagVersion = "${{ github.ref_name }}".TrimStart("v", "V")
+          if ($tagVersion -ne $declared) {
+            throw "Tag version '$tagVersion' does not match Directory.Build.props version '$declared'."
+          }
+          Write-Host "Tag and declared version agree: $declared"
+
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: 8.0.x
+
+      - name: Restore
+        run: dotnet restore ZmboxZmx4Assist.sln
+
+      - name: Verify formatting
+        run: dotnet format ZmboxZmx4Assist.sln --verify-no-changes --no-restore
+
+      - name: Build
+        run: dotnet build ZmboxZmx4Assist.sln -c Release --no-restore
+
+      - name: Test
+        run: dotnet test ZmboxZmx4Assist.sln -c Release --no-build --no-restore
+
+      - name: Publish self-contained win-x64 package
+        shell: pwsh
+        run: ./scripts/publish.ps1 -OutputDirectory releases
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: ZmboxZmx4Assist-win-x64-package
+          path: releases/*.zip
+          if-no-files-found: error

@@ -51,6 +51,8 @@ pwsh ./scripts/publish.ps1
 
 版本号只有 `Directory.Build.props` 一个来源，同时写进程序集与压缩包名；发布前记得同步 `CHANGELOG.md`。脚本先自包含发布到 `publish/win-x64`，再打包到 `releases/ZmboxZmx4Assist-<版本>-win-x64.zip`。
 
+推送 `v*` 标签会触发 `.github/workflows/release.yml`：它先校验标签版本与 `Directory.Build.props` 一致，再跑格式检查、构建和测试，最后把 win-x64 压缩包作为 workflow artifact 上传。该工作流不自动创建 GitHub Release——正式发布仍需单独确认。
+
 仓库采用 [GPL-3.0-only](LICENSE)。贡献要求见 [CONTRIBUTING.md](CONTRIBUTING.md)，架构见 [docs/architecture.md](docs/architecture.md)，故障排查见 [docs/troubleshooting.md](docs/troubleshooting.md)。
 
 ## English
