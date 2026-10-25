@@ -3,7 +3,7 @@ using System.Windows.Threading;
 using ZmboxZmx4Assist.Domain;
 using ZmboxZmx4Assist.Services;
 
-namespace ZmboxZmx4Assist;
+namespace ZmboxZmx4Assist.Views;
 
 public partial class ForegroundWindowCaptureDialog : Window
 {

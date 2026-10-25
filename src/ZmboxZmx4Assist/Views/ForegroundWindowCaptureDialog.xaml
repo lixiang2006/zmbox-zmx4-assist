@@ -1,4 +1,4 @@
-<Window x:Class="ZmboxZmx4Assist.ForegroundWindowCaptureDialog"
+<Window x:Class="ZmboxZmx4Assist.Views.ForegroundWindowCaptureDialog"
         xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
         Title="锁定回放窗口" Width="470" Height="330" ResizeMode="NoResize"

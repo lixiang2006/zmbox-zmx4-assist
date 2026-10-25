@@ -1,4 +1,5 @@
 using ZmboxZmx4Assist.Services;
+using ZmboxZmx4Assist.Views;
 using System.Globalization;
 using System.IO;
 using System.Threading;

@@ -4,7 +4,7 @@ using ZmboxZmx4Assist.Domain;
 using ZmboxZmx4Assist.Services;
 using WpfMessageBox = System.Windows.MessageBox;
 
-namespace ZmboxZmx4Assist;
+namespace ZmboxZmx4Assist.Views;
 
 // Playback session entry points: pre-flight validation, window lock acquisition, the
 // playback/restart-session dispatch and the emergency-stop path.

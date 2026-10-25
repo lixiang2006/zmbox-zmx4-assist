@@ -3,7 +3,7 @@ using System.Windows;
 using System.Windows.Interop;
 using System.Windows.Threading;
 
-namespace ZmboxZmx4Assist;
+namespace ZmboxZmx4Assist.Views;
 
 public partial class RecordingIndicatorWindow : System.Windows.Window
 {

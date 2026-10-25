@@ -1,7 +1,8 @@
 using System.Windows;
 using ZmboxZmx4Assist.Services;
+using ZmboxZmx4Assist.ViewModels;
 
-namespace ZmboxZmx4Assist;
+namespace ZmboxZmx4Assist.Views;
 
 // Recording session: start/stop, save, and the recording-indicator notifications.
 public partial class MainWindow

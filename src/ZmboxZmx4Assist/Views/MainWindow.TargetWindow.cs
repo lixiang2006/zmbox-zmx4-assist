@@ -3,7 +3,7 @@ using System.Windows.Controls;
 using ZmboxZmx4Assist.Domain;
 using ZmboxZmx4Assist.Services;
 
-namespace ZmboxZmx4Assist;
+namespace ZmboxZmx4Assist.Views;
 
 // Target window: profile edits, manual window lock/capture, background capability marking and
 // the pre-flight/preview panels.

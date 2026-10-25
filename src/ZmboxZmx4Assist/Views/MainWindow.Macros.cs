@@ -5,10 +5,11 @@ using System.Windows.Input;
 using System.Windows.Media;
 using ZmboxZmx4Assist.Domain;
 using ZmboxZmx4Assist.Services;
+using ZmboxZmx4Assist.ViewModels;
 using WpfMessageBox = System.Windows.MessageBox;
 using WpfTextBox = System.Windows.Controls.TextBox;
 
-namespace ZmboxZmx4Assist;
+namespace ZmboxZmx4Assist.Views;
 
 // Macro library: loading the saved macros, the list/summary refresh, rename and delete flows.
 public partial class MainWindow

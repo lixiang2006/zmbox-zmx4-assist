@@ -4,9 +4,10 @@ using System.Windows.Input;
 using System.Windows.Media;
 using ZmboxZmx4Assist.Domain;
 using ZmboxZmx4Assist.Services;
+using ZmboxZmx4Assist.ViewModels;
 using WpfColor = System.Windows.Media.Color;
 
-namespace ZmboxZmx4Assist;
+namespace ZmboxZmx4Assist.Views;
 
 // Automatic restart session: settings binding/validation, request construction and the
 // window-binding hand-off after a relaunch.

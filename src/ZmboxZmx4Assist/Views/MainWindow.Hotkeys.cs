@@ -3,7 +3,7 @@ using System.Windows.Input;
 using ZmboxZmx4Assist.Domain;
 using WpfTextBox = System.Windows.Controls.TextBox;
 
-namespace ZmboxZmx4Assist;
+namespace ZmboxZmx4Assist.Views;
 
 // Global hotkeys: the capture boxes, draft bindings and saving/validation.
 public partial class MainWindow

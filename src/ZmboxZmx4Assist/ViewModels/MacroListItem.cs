@@ -2,7 +2,7 @@ using System.ComponentModel;
 using System.Runtime.CompilerServices;
 using ZmboxZmx4Assist.Domain;
 
-namespace ZmboxZmx4Assist;
+namespace ZmboxZmx4Assist.ViewModels;
 
 public sealed class MacroListItem : INotifyPropertyChanged
 {

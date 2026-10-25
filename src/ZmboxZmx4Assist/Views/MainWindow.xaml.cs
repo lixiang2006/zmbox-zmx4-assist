@@ -3,9 +3,10 @@ using System.Windows;
 using System.Windows.Media;
 using ZmboxZmx4Assist.Domain;
 using ZmboxZmx4Assist.Services;
+using ZmboxZmx4Assist.ViewModels;
 using WpfColor = System.Windows.Media.Color;
 
-namespace ZmboxZmx4Assist;
+namespace ZmboxZmx4Assist.Views;
 
 /// <summary>
 /// Core of the main window: service composition, shared state and the cross-cutting status /
