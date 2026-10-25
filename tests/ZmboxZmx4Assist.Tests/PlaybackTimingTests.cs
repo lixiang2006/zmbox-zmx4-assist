@@ -3,6 +3,7 @@ using ZmboxZmx4Assist.Utilities;
 namespace ZmboxZmx4Assist.Tests;
 
 [TestClass]
+[DoNotParallelize] // HighResolutionTimer is process-global; these tests must not share its counter with a parallel run.
 public sealed class PlaybackTimingTests
 {
     [TestMethod]
