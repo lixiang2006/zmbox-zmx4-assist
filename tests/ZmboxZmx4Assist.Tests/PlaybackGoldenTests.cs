@@ -66,6 +66,19 @@ public sealed class PlaybackGoldenTests
         Assert.IsTrue(sink.Dispatched.All(op => op.StartsWith("ExperimentalTargetWindow|", StringComparison.Ordinal)));
     }
 
+    [TestMethod]
+    public async Task EmergencyStop_DuringAndAfterPlayback_IsHarmless()
+    {
+        var player = new PlaybackService(new TargetWindowService(), new RecordingInputSink(), new AlwaysReadyGuard());
+
+        var run = player.PlayAsync(BuildMacro(), BuildProfile(), PlaybackOptions.Default);
+        player.EmergencyStop();
+        await run;
+        player.EmergencyStop();
+
+        Assert.IsFalse(player.IsRunning);
+    }
+
     private static MacroDefinition BuildMacro(bool includeKeyUp = true)
     {
         var events = new List<RecordedEvent>

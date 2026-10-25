@@ -9,6 +9,14 @@ public sealed class PlaybackService : IPlaybackRoundExecutor
 {
     private const int ForegroundRecoverySeconds = 5;
     private const int BackgroundRecoverySeconds = 15;
+
+    /// <summary>
+    /// Wake-ups shorter than this are the normal spin margin. Longer ones are a real stall (a GC
+    /// pause, a busy machine, a slow frame) and are absorbed into the timeline instead of letting
+    /// the remaining gaps collapse into one burst.
+    /// </summary>
+    internal static readonly long OvershootToleranceTicks = Stopwatch.Frequency / 4_000;
+
     private readonly IInputSink _input;
     private readonly IPlaybackTargetGuard _targetGuard;
     private readonly HashSet<int> _pressedKeys = [];
@@ -31,7 +39,7 @@ public sealed class PlaybackService : IPlaybackRoundExecutor
         await PlayCoreAsync(macro, profile, options, manualWindow, CancellationToken.None, reportStop: true, reportCompletion: true);
     }
 
-    public Task<PlaybackRunResult> PlaySingleIterationAsync(
+    public async Task<PlaybackRunResult> PlaySingleIterationAsync(
         MacroDefinition macro,
         TargetProfile profile,
         PlaybackOptions options,
@@ -46,10 +54,14 @@ public sealed class PlaybackService : IPlaybackRoundExecutor
             CooldownEveryIterations = 1,
             CooldownSeconds = 0
         };
-        return PlayCoreAsync(macro, profile, singleIteration, manualWindow, cancellationToken, reportStop: false, reportCompletion: false);
+        return await PlayCoreAsync(macro, profile, singleIteration, manualWindow, cancellationToken, reportStop: false, reportCompletion: false);
     }
 
-    private async Task<PlaybackRunResult> PlayCoreAsync(
+    /// <summary>
+    /// Validates the request synchronously, so callers keep receiving the same argument errors,
+    /// publishes the running state immediately, and hands the timeline to a pool thread.
+    /// </summary>
+    private Task<PlaybackRunResult> PlayCoreAsync(
         MacroDefinition macro,
         TargetProfile profile,
         PlaybackOptions options,
@@ -69,13 +81,28 @@ public sealed class PlaybackService : IPlaybackRoundExecutor
         if (options.CooldownEveryIterations is < 1 or > 1000) throw new InvalidOperationException("周期冷却轮数必须在 1 到 1000 之间。");
         if (options.CooldownSeconds is < 0 or > 900) throw new InvalidOperationException("周期冷却等待必须在 0 到 900 秒之间。");
 
-        var window = IntPtr.Zero;
         _running = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
-        using var timer = HighResolutionTimer.Acquire();
         StateChanged?.Invoke();
+        // The timeline busy-spins the last milliseconds of every gap and then calls SendInput. On
+        // the Dispatcher thread that starved the window's own rendering and input handling, which
+        // is what made long sessions look stuck; the status/state events marshal themselves back.
+        return Task.Run(() => RunCoreAsync(macro, profile, options, manualWindow, reportStop, reportCompletion));
+    }
+
+    private async Task<PlaybackRunResult> RunCoreAsync(
+        MacroDefinition macro,
+        TargetProfile profile,
+        PlaybackOptions options,
+        ManualWindowBinding? manualWindow,
+        bool reportStop,
+        bool reportCompletion)
+    {
+        var token = _running!.Token;
+        var window = IntPtr.Zero;
+        using var timer = HighResolutionTimer.Acquire();
         try
         {
-            _running.Token.ThrowIfCancellationRequested();
+            token.ThrowIfCancellationRequested();
             window = EnsureTargetReady(macro, profile, options, manualWindow);
             // 后台通道靠窗口消息投递；启动前先试一次，把权限/完整性拦截说清楚，而不是在宏跑到一半时中断。
             if (options.Mode == PlaybackMode.ExperimentalTargetWindow && !_input.TryProbeBackgroundChannel(window, out var probeFailure))
@@ -85,15 +112,15 @@ public sealed class PlaybackService : IPlaybackRoundExecutor
             {
                 iteration++;
                 StatusChanged?.Invoke($"正在回放第 {iteration} 轮…");
-                window = await PlayOnceAsync(macro.Events, window, macro, profile, options, manualWindow, _running.Token);
+                window = await PlayOnceAsync(macro.Events, window, macro, profile, options, manualWindow, token);
                 ReleaseAll(window, options.Mode);
                 var hasNextIteration = options.InfiniteLoop || iteration < Math.Max(1, options.RepeatCount);
                 if (hasNextIteration && options.InterIterationDelaySeconds > 0)
-                    await WaitBetweenIterationsAsync(iteration, options.InterIterationDelaySeconds, _running.Token);
+                    await WaitBetweenIterationsAsync(iteration, options.InterIterationDelaySeconds, token);
                 if (options.ShouldCooldownAfter(iteration, hasNextIteration))
                 {
-                    await WaitCooldownAsync(iteration, options.CooldownSeconds, _running.Token);
-                    window = await RecoverFoundWindowAsync(macro, profile, options, manualWindow, _running.Token);
+                    await WaitCooldownAsync(iteration, options.CooldownSeconds, token);
+                    window = await RecoverFoundWindowAsync(macro, profile, options, manualWindow, token);
                 }
             }
             while (options.InfiniteLoop || iteration < Math.Max(1, options.RepeatCount));
@@ -102,7 +129,7 @@ public sealed class PlaybackService : IPlaybackRoundExecutor
         }
         catch (OperationCanceledException ex)
         {
-            var userRequested = _running.IsCancellationRequested;
+            var userRequested = _running!.IsCancellationRequested;
             var reason = userRequested || string.IsNullOrWhiteSpace(ex.Message)
                 ? "已请求停止。"
                 : ex.Message;
@@ -122,13 +149,23 @@ public sealed class PlaybackService : IPlaybackRoundExecutor
         finally
         {
             ReleaseAll(window, options.Mode);
-            _running.Dispose();
+            _running?.Dispose();
             _running = null;
             StateChanged?.Invoke();
         }
     }
 
-    public void EmergencyStop() => _running?.Cancel();
+    public void EmergencyStop()
+    {
+        try
+        {
+            _running?.Cancel();
+        }
+        catch (ObjectDisposedException)
+        {
+            // 回放线程已经在收尾并释放了取消源；此时停止请求已经是既成事实。
+        }
+    }
 
     private async Task WaitBetweenIterationsAsync(int completedIteration, int seconds, CancellationToken token)
     {
@@ -178,15 +215,20 @@ public sealed class PlaybackService : IPlaybackRoundExecutor
             window = beforeWait.Window;
             started += beforeWait.PauseTicks;
 
-            var due = e.OffsetMicroseconds / options.SpeedMultiplier;
+            var dueTicks = DueTicks(e.OffsetMicroseconds / options.SpeedMultiplier);
             while (true)
             {
-                await WaitUntilAsync(started, due, token);
+                await WaitUntilAsync(started, dueTicks, token);
                 var beforeDispatch = await RecoverCurrentWindowIfNeededAsync(window, macro, profile, options, manualWindow, token);
                 window = beforeDispatch.Window;
                 if (beforeDispatch.PauseTicks == 0) break;
                 started += beforeDispatch.PauseTicks;
             }
+
+            // A late wake-up used to leave the timeline reference behind, so every event that
+            // followed fired back-to-back - the "断触" symptom. Absorb the stall into the
+            // reference instead, which keeps the recorded intervals intact.
+            started += OvershootTicks(started, dueTicks, Stopwatch.GetTimestamp());
             Dispatch(window, e, options.Mode, bounds);
         }
         return window;
@@ -237,9 +279,17 @@ public sealed class PlaybackService : IPlaybackRoundExecutor
         }
     }
 
-    private static async Task WaitUntilAsync(long start, double dueMicroseconds, CancellationToken token)
+    internal static long DueTicks(double dueMicroseconds) =>
+        (long)(dueMicroseconds * Stopwatch.Frequency / 1_000_000d);
+
+    internal static long OvershootTicks(long started, long dueTicks, long nowTicks)
     {
-        var dueTicks = (long)(dueMicroseconds * Stopwatch.Frequency / 1_000_000d);
+        var late = nowTicks - (started + dueTicks);
+        return late > OvershootToleranceTicks ? late : 0;
+    }
+
+    private static async Task WaitUntilAsync(long start, long dueTicks, CancellationToken token)
+    {
         while (true)
         {
             var remaining = dueTicks - (Stopwatch.GetTimestamp() - start);

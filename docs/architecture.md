@@ -26,6 +26,14 @@ or a background binding that no longer matches the profile still pauses
 immediately. The golden playback tests drive the real timeline through both
 seams, so the dispatch sequence is pinned without touching a desktop.
 
+The playback timeline runs on a pool thread, not the Dispatcher: the final
+milliseconds of every gap are a busy spin and each event ends in an input call,
+so keeping them on the UI thread starved the window's own rendering and input
+handling. Status and state events marshal themselves back. Waiting is a hybrid
+sleep/spin, and when a wake-up overshoots the spin margin — a GC pause, a busy
+machine, a slow frame — the timeline reference absorbs that overshoot, so the
+remaining recorded intervals stay intact instead of collapsing into a burst.
+
 `RestartSessionService` owns one cancellation token and orchestrates a primary
 macro as discrete safe iterations. At a configured session-uptime boundary it
 delegates normal close, exact-PID launch/window binding, layout restore and a
